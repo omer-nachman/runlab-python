@@ -34,6 +34,29 @@ __version__ = "0.1.0"
 RETRY_STATUS = (429, 502, 503, 504)
 
 
+def _origin(url: str) -> tuple[str, str, int | None]:
+    p = urllib.parse.urlsplit(url)
+    return p.scheme, (p.hostname or "").lower(), p.port or {"http": 80, "https": 443}.get(p.scheme)
+
+
+class _KeepTokenOnOrigin(urllib.request.HTTPRedirectHandler):
+    """urllib copies every header to wherever a redirect points, so one 302 from your URL
+    (or anything in front of it) could hand the bearer token to another host. Keep Authorization only on the
+    same scheme, host and port, or the http -> https upgrade of the same host (requests'
+    `should_strip_auth`); drop it on any other redirect."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        new = super().redirect_request(req, fp, code, msg, headers, newurl)
+        old, to = _origin(req.full_url), _origin(newurl)
+        upgrade = old[:2] == ("http", to[1]) and to[0] == "https" and (old[2], to[2]) == (80, 443)
+        if new is not None and old != to and not upgrade:
+            new.remove_header("Authorization")
+        return new
+
+
+_OPENER = urllib.request.build_opener(_KeepTokenOnOrigin)
+
+
 class RunLabError(RuntimeError):
     """An HTTP error (`status` 400-599) or RunLab unreachable (`status` 0)."""
 
@@ -58,6 +81,11 @@ class RunLab:
         if not url:
             raise ValueError("no RunLab URL: pass url= or set RUNLAB_URL")
         self.url = url.rstrip("/")
+        parts = urllib.parse.urlsplit(self.url)
+        if parts.scheme not in ("http", "https") or not parts.hostname:
+            raise ValueError("url must be http:// or https://<host>")
+        if parts.username or parts.password:
+            raise ValueError("pass the token as token=, not inside the url")
         self.token = token if token is not None else os.environ.get("RUNLAB_TOKEN", "")
         self.timeout = timeout
         self.retries = retries
@@ -83,7 +111,7 @@ class RunLab:
         for i in range(attempts):
             req = urllib.request.Request(url, data=data, headers=headers, method=method)
             try:
-                with urllib.request.urlopen(req, timeout=self.timeout) as r:  # noqa: S310
+                with _OPENER.open(req, timeout=self.timeout) as r:  # noqa: S310
                     return json.loads(r.read() or b"{}")
             except urllib.error.HTTPError as exc:
                 if exc.code in RETRY_STATUS and i + 1 < attempts:
