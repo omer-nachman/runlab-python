@@ -61,6 +61,14 @@ with a simulated `train` is [examples/quickstart.py](examples/quickstart.py), an
 | Audit | `verdicts(project)`, `verdict(id)` | `GET /api/v1/research/verdicts`, `GET /api/v1/verdicts/{id}` | Shows every recorded verdict, each seed's values, and whether it still holds on today's results. |
 | Delegate | `start_study(...)`, `wait_study(id)` | `POST /api/v1/research/studies` | Runs the seeds itself under a dollar cap and stops once the evidence decides (see below). |
 
+### Each user sees only their projects
+
+On a RunLab where each user has their own data, a project name is yours alone: your `demo`
+and a colleague's `demo` are two projects, never merged, deduplicated or compared with each
+other. Lists (`verdicts()`, `studies()`, `report("")`) show only your projects. A verdict or
+study id that is not yours answers 404, the same as one that does not exist, and an unknown
+project's closest match is one of yours. Project names may not contain `~`.
+
 `a` is the treatment and `b` the baseline. `diff` is the mean of a − b, so it is positive when
 a scored higher. Whether higher is better comes from the metric name: lower for names
 containing `loss`, `error`, `err`, `perplexity`, `ppl`, `wer`, `cer`, `mse`, `mae`, `rmse`,
