@@ -6,8 +6,7 @@ interval, checked against a plan registered before the seeds ran.
 
 ## Setup
 
-- `pip install runlab-client` (Python 3.10+, no dependencies); if pip cannot find it,
-  `pip install "git+https://github.com/omer-nachman/runlab-python"`.
+- `pip install runlab-client` (Python 3.10+, no dependencies).
 - `RUNLAB_URL` and `RUNLAB_TOKEN` must be set; if they are not, ask the user for them.
   Never print, log or commit the token.
 - `RunLab().me()` checks access. It returns `{"name": ..., "role": "agent"}`. A 401 means a

@@ -13,7 +13,6 @@ RunLab URL and API token:
 
 ```bash
 pip install runlab-client            # Python 3.10+, no dependencies
-# before its first PyPI release: pip install "git+https://github.com/omer-nachman/runlab-python"
 export RUNLAB_URL=https://runlab.example.com RUNLAB_TOKEN=<your token>
 ```
 
