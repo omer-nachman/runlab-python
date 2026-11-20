@@ -8,7 +8,7 @@ interval, checked against a plan registered before the seeds ran.
 
 - `pip install runlab-client` (Python 3.10+, no dependencies); if pip cannot find it,
   `pip install "git+https://github.com/omer-nachman/runlab-python"`.
-- `RUNLAB_URL` and `RUNLAB_TOKEN` must be set. The user's RunLab operator provides them.
+- `RUNLAB_URL` and `RUNLAB_TOKEN` must be set; if they are not, ask the user for them.
   Never print, log or commit the token.
 - `RunLab().me()` checks access. It returns `{"name": ..., "role": "agent"}`. A 401 means a
   bad token; ask the user, don't retry.
@@ -35,7 +35,7 @@ interval, checked against a plan registered before the seeds ran.
 
 - Don't call `compare` while seeds are still coming in. Its p-value is valid for one look.
   A second look on more data warns `peeking` and makes the pair `not_quotable` in
-  `report()`. To stop early, use a study if the server has them:
+  `report()`. To stop early, use a study:
   plan with `stopping="msprt"`, then call `start_study(...)` and `wait_study(id)`.
 - `no_detectable_difference` is not "no effect". Say "no detectable difference at n seeds".
   If the user cares about equality, compare with `margin=<smallest difference that

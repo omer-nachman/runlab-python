@@ -12,7 +12,7 @@
     print(v["verdict"], v["text"])
 
 Standard library only, Python 3.10+. Each method is one operation of openapi.json.
-Errors raise RunLabError with the HTTP status, the server's message and the request id.
+Errors raise RunLabError with the HTTP status, RunLab's message and the request id.
 GET requests are retried on connection errors and on 429, 502, 503 and 504 with exponential
 backoff; POST requests are never retried.
 """
@@ -35,7 +35,7 @@ RETRY_STATUS = (429, 502, 503, 504)
 
 
 class RunLabError(RuntimeError):
-    """An HTTP error (`status` 400-599) or an unreachable server (`status` 0)."""
+    """An HTTP error (`status` 400-599) or RunLab unreachable (`status` 0)."""
 
     def __init__(self, status: int, message: str, request_id: str = "") -> None:
         super().__init__(f"HTTP {status}: {message}"
@@ -46,9 +46,9 @@ class RunLabError(RuntimeError):
 
 
 class RunLab:
-    """A connection to one RunLab server.
+    """A connection to RunLab.
 
-    url: the server, e.g. "https://runlab.example.com" (default: env RUNLAB_URL).
+    url: your RunLab URL, e.g. "https://runlab.example.com" (default: env RUNLAB_URL).
     token: your API token (default: env RUNLAB_TOKEN).
     """
 
@@ -56,7 +56,7 @@ class RunLab:
                  timeout: float = 30.0, retries: int = 3, backoff_s: float = 0.5) -> None:
         url = url or os.environ.get("RUNLAB_URL", "")
         if not url:
-            raise ValueError("no server: pass url= or set RUNLAB_URL")
+            raise ValueError("no RunLab URL: pass url= or set RUNLAB_URL")
         self.url = url.rstrip("/")
         self.token = token if token is not None else os.environ.get("RUNLAB_TOKEN", "")
         self.timeout = timeout
@@ -122,7 +122,7 @@ class RunLab:
 
     def record(self, project: str, results: str | list[str]) -> dict[str, Any]:
         """Store RESULT lines (one string, or a list of lines from `result_line`).
-        Returns `stored` and `already` (lines the server had already)."""
+        Returns `stored` and `already` (lines RunLab had already)."""
         text = results if isinstance(results, str) else "\n".join(results)
         return self.request("POST", "/research/results",
                             {"project": project, "results": text})
@@ -167,8 +167,8 @@ class RunLab:
     def start_study(self, project: str, command: str, a: str, b: str, metric: str,
                     max_usd: float, *, params: dict[str, Any] | None = None,
                     arm_params: dict[str, dict[str, Any]] | None = None) -> dict[str, Any]:
-        """Let the server run the seeds of a planned comparison under a hard dollar cap.
-        `command` is a name your server's operator set up; `params` fill its placeholders
+        """Let RunLab run the seeds of a planned comparison under a hard dollar cap.
+        `command` names the training command to run; `params` fill its placeholders
         for both arms, `arm_params` per arm, keyed by arm name: {"mixup": {"alpha": "0.2"}}.
         A refusal raises RunLabError (400) before anything runs."""
         body: dict[str, Any] = {"project": project, "command": command, "a": a, "b": b,
@@ -191,7 +191,7 @@ class RunLab:
     def wait_study(self, study_id: str, timeout: float = 24 * 3600,
                    poll_s: float = 30.0) -> dict[str, Any]:
         """Poll until the study stops running and return it. Raises TimeoutError after
-        `timeout` seconds (the study keeps running on the server)."""
+        `timeout` seconds (the study keeps running in RunLab)."""
         deadline = time.monotonic() + timeout
         while True:
             s = self.study(study_id)
@@ -209,7 +209,7 @@ def result_line(experiment: str, metric: str, value: float, *, seed: int | None 
     Names use letters, digits, `_`, `.` and `-`; parameter values cannot hold spaces or `=`.
     """
     for k, v in params.items():
-        if k == "reported":                    # the server reads it as a paper's number
+        if k == "reported":                    # RunLab reads it as a paper's number
             raise ValueError("param 'reported' is reserved")
         if " " in str(v) or "=" in str(v):
             raise ValueError(f"param {k}={v!r}: values cannot hold spaces or '='")

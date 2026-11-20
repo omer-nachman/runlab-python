@@ -4,7 +4,7 @@
     "title": "RunLab research API",
     "version": "0.1.0",
     "summary": "Pre-register a comparison, record per-seed results, get a verdict you can quote.",
-    "description": "Did my change actually help? Record each seed's metric for two arms (the change and its\nbaseline), then ask for a verdict: a paired test across seeds with its 95 % confidence\ninterval, checked against the plan you registered before the seeds ran.\n\n**Auth.** Every call needs `Authorization: Bearer <token>`. The operator of your RunLab\nserver creates your user and gives you the server URL and token. The `agent` role (the\nusual one for researchers and their coding agents) may call every operation here.\n\n**Requests.** Bodies are JSON (`Content-Type: application/json`, at most 64 KiB). Every\nresponse carries `X-Request-Id` (yours, if you sent one); quote it when you report a\nproblem. Errors are `{\"error\": \"<what is wrong>\"}` with status 400 (bad input), 401 (no or\nbad token), 403 (role too low), 404 (no such id) or 413 (body too large).\n\n**Stability.** `/api/v1` changes only by adding fields and operations.\n\nPython client, guide and examples: https://github.com/omer-nachman/runlab-python",
+    "description": "Did my change actually help? Record each seed's metric for two arms (the change and its\nbaseline), then ask for a verdict: a paired test across seeds with its 95 % confidence\ninterval, checked against the plan you registered before the seeds ran.\n\n**Auth.** Every call needs `Authorization: Bearer <token>`, your API token. An `agent`\ntoken (the usual one for researchers and their coding agents) may call every operation here.\n\n**Requests.** Bodies are JSON (`Content-Type: application/json`, at most 64 KiB). Every\nresponse carries `X-Request-Id` (yours, if you sent one); quote it when you report a\nproblem. Errors are `{\"error\": \"<what is wrong>\"}` with status 400 (bad input), 401 (no or\nbad token), 403 (role too low), 404 (no such id) or 413 (body too large).\n\n**Stability.** `/api/v1` changes only by adding fields and operations.\n\nPython client, guide and examples: https://github.com/omer-nachman/runlab-python",
     "license": {
       "name": "MIT",
       "identifier": "MIT"
@@ -17,11 +17,11 @@
   "servers": [
     {
       "url": "https://{host}",
-      "description": "Your RunLab server",
+      "description": "Your RunLab",
       "variables": {
         "host": {
           "default": "runlab.example.com",
-          "description": "Your server's host name"
+          "description": "Your RunLab host name"
         }
       }
     }
@@ -41,7 +41,7 @@
     },
     {
       "name": "studies",
-      "description": "Let the server run the seeds of a planned comparison under a dollar cap."
+      "description": "Let RunLab run the seeds of a planned comparison under a dollar cap."
     }
   ],
   "paths": {
@@ -72,12 +72,7 @@
                     },
                     "role": {
                       "type": "string",
-                      "enum": [
-                        "viewer",
-                        "agent",
-                        "operator",
-                        "admin"
-                      ]
+                      "description": "Your access level: `agent` can call every operation here, `viewer` only reads."
                     }
                   }
                 },
@@ -413,7 +408,7 @@
                     },
                     "already": {
                       "type": "integer",
-                      "description": "Lines the server had already."
+                      "description": "Lines RunLab had already."
                     }
                   }
                 },
@@ -950,7 +945,7 @@
                           },
                           "stale": {
                             "type": "boolean",
-                            "description": "Absent when the server could not tell."
+                            "description": "Absent when RunLab could not tell."
                           }
                         }
                       }
@@ -1338,8 +1333,8 @@
         "tags": [
           "studies"
         ],
-        "summary": "Run a planned comparison's seeds on the server",
-        "description": "The server runs seeds of both arms, one pair at a time, with the plan's sequential test\n(register the plan with `stopping: msprt` first), and stops as soon as the evidence\ndecides, at `n_max`, or at `max_usd`, whichever comes first. A watchdog kills it at the\ncap.\n\n`command` names one of the training commands your server's operator set up; the\noperator also sets the price per hour and the caps. Every check runs before anything\nstarts: a refusal is a 400 whose `error` says why (studies off, unknown command, no\nplan, cap or budget exceeded, too many running) and nothing is spent.\n\nRole: agent or above.",
+        "summary": "Let RunLab run a planned comparison's seeds",
+        "description": "RunLab runs seeds of both arms, one pair at a time, with the plan's sequential test\n(register the plan with `stopping: msprt` first), and stops as soon as the evidence\ndecides, at `n_max`, or at `max_usd`, whichever comes first. It never spends more than\n`max_usd`.\n\n`command` names the training command to run. Every check runs before anything starts:\na refusal is a 400 whose `error` says why (unknown command, no msprt plan, cap too\nhigh, too many running) and nothing is spent.\n\nRole: agent or above.",
         "x-runlab-role": "agent",
         "parameters": [],
         "responses": {
@@ -1407,7 +1402,7 @@
                   },
                   "command": {
                     "type": "string",
-                    "description": "The name of an operator-defined command."
+                    "description": "One of your training command names."
                   },
                   "a": {
                     "type": "string",
@@ -1683,7 +1678,7 @@
               "lost",
               "refused"
             ],
-            "description": "`running`; `decided` (the sequential test stopped: see `decision` and `winner`);\n`undecided` (n_max seeds ran without a decision); `budget` (the run's compute\nbudget was spent before a decision); `killed` (the watchdog stopped it at the\ndollar cap);\n`failed` (the command failed or printed no result, see `detail`); `lost` (still\nmarked running well past its deadline, e.g. after a server restart); `refused`.\n"
+            "description": "`running`; `decided` (the sequential test stopped: see `decision` and `winner`);\n`undecided` (n_max seeds ran without a decision); `budget` (the run's compute\nbudget was spent before a decision); `killed` (stopped at the dollar cap);\n`failed` (the command failed or printed no result, see `detail`); `lost` (stopped\nreporting well past its deadline); `refused`.\n"
           },
           "project": {
             "type": "string"
@@ -1699,7 +1694,7 @@
           },
           "command": {
             "type": "string",
-            "description": "The operator-defined command name it runs."
+            "description": "The training command name it runs."
           },
           "max_usd": {
             "type": "number",

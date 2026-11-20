@@ -1,7 +1,7 @@
 """Did the change help? Plan, record 10 seeds per arm, get the verdict, check it is quotable.
 
     pip install runlab-client     # or: pip install "git+https://github.com/omer-nachman/runlab-python"
-    export RUNLAB_URL=https://<your-server> RUNLAB_TOKEN=<your-token>
+    export RUNLAB_URL=<your-runlab-url> RUNLAB_TOKEN=<your-token>
     python quickstart.py [project]
 
 `train` is a stand-in: replace it with your training run, returning the metric for one seed.
@@ -37,7 +37,7 @@ try:
     v = rl.compare(PROJECT, "treatment", "baseline", "acc")
     # 4. May a write-up quote it? (false discovery rate across every pair of the project)
     claims = rl.report(PROJECT, arm="treatment", metric="acc")["claims"]
-except RunLabError as exc:                     # HTTP status, the server's message, request id
+except RunLabError as exc:                     # HTTP status, RunLab's message, request id
     sys.exit(f"RunLab: {exc}")
 
 print(v["text"])

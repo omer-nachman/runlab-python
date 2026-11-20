@@ -4,7 +4,7 @@
 > comparison, record each seed's metric, and get a verdict. The verdict comes from a paired
 > test with a 95 % confidence interval, checked against the plan. It refuses a misleading
 > comparison and says which wins a write-up may quote. The client uses only the standard
-> library; you need a RunLab server URL and token (env RUNLAB_URL, RUNLAB_TOKEN).
+> library; you need your RunLab URL and token (env RUNLAB_URL, RUNLAB_TOKEN).
 
 ## Docs
 

@@ -1,15 +1,15 @@
 # runlab-client
 
 **Did my change actually help?** You record each seed's metric for two arms: your change and
-its baseline. A RunLab server gives back a verdict you can quote, built from:
+its baseline. RunLab gives back a verdict you can quote, built from:
 
 - a pre-registered plan;
 - a paired test across seeds, with a 95 % confidence interval;
 - checks that refuse a comparison that would mislead, e.g. arms tuned with unequal budgets.
 
 This repo has the Python client (standard library only), the
-[OpenAPI spec](openapi.json) ([rendered](api.html)) and examples. You need the URL of a
-RunLab server and an API token, both from its operator.
+[OpenAPI spec](openapi.json) ([rendered](api.html)) and examples. Install it and set your
+RunLab URL and API token:
 
 ```bash
 pip install runlab-client            # Python 3.10+, no dependencies
@@ -53,7 +53,7 @@ with a simulated `train` is [examples/quickstart.py](examples/quickstart.py), an
 
 ## The loop
 
-| Step | Client | HTTP | What the server does |
+| Step | Client | HTTP | What RunLab does |
 |---|---|---|---|
 | 1. Plan | `plan(project, a, b, metric, hypothesis, n_max)` | `POST /api/v1/research/plans` | Stores the plan and its hash. Estimates power from seeds already recorded (`power_check`). |
 | 2. Record | `result(project, arm, seed=s, metric=value)` or `record(project, lines)` | `POST /api/v1/research/results` | Stores one row per arm, seed and metric. A line it already has is skipped, so retries are safe. |
@@ -70,7 +70,7 @@ containing `loss`, `error`, `err`, `perplexity`, `ppl`, `wer`, `cer`, `mse`, `ma
 
 ### Results
 
-The server stores each result as one line:
+RunLab stores each result as one line:
 
 ```
 RESULT: <arm> <metric>=<number> seed=<n> [<param>=<value> ...]
@@ -121,9 +121,9 @@ Read these fields next to the verdict:
 | Many comparisons | At alpha 0.05, about 1 in 20 pairs with no real difference still comes out a "win". | `report()` applies Benjamini-Hochberg across all pairs in the project. Each claim is `quotable`, `quotable_with_caveat` or `not_quotable`, and carries a ready `quote`. |
 | Results can go bad | A seed or dataset later found broken undermines verdicts built on it. | `verdicts()` counts verdicts built on results since marked bad in `stale`; `verdicts(recheck=True)` judges each pair again on today's results (`unchanged`, `inputs_changed` or `flipped`). |
 
-## Studies: let the server run the seeds
+## Studies: let RunLab run the seeds
 
-If your server's operator has set up training commands, the server can run the seeds itself.
+RunLab can also run the seeds for you.
 It runs both arms one seed pair at a time and stops as soon as an always-valid sequential test
 (mSPRT) decides. It also stops at `n_max`, or at your dollar cap, whichever comes first.
 
@@ -136,12 +136,11 @@ s = rl.wait_study(s["id"])
 print(s["state"], s["winner"], s["pairs"], s["usd"])                  # e.g. decided mixup 6 0.84
 ```
 
-- `command` is one of the names the operator configured. `params` and `arm_params` fill its
+- `command` names the training command to run. `params` and `arm_params` fill its
   placeholders, using values of letters, digits and `_.:+=-` only.
 - Every check runs before anything starts. A refusal raises `RunLabError` with status 400
-  and costs nothing, e.g. when studies are off, the command is unknown, there is no msprt
-  plan, or the cap is above the server's limit.
-- A watchdog kills a study at its cap.
+  and costs nothing, e.g. an unknown command, no msprt plan, or a cap that is too high.
+- A study never spends more than `max_usd`.
 - `state` is one of:
 
   | `state` | Meaning |
@@ -150,17 +149,17 @@ print(s["state"], s["winner"], s["pairs"], s["usd"])                  # e.g. dec
   | `decided` | The sequential test stopped. `decision` is `A` or `B` (`winner` names the arm), or `futile` (no detectable difference at this budget) or `equivalent` (`winner` is null). |
   | `undecided` | `n_max` seeds ran without a decision. |
   | `budget` | The run's compute budget was spent before a decision. |
-  | `killed` | The watchdog stopped it at the dollar cap. |
+  | `killed` | Stopped at the dollar cap. |
   | `failed` | The command failed or printed no result; see `detail`. |
-  | `lost` | Still marked running long past its deadline, e.g. after a server restart. |
+  | `lost` | Stopped reporting long past its deadline. |
   | `refused` | Refused at the start (that call raised a 400); listed for the record. |
 
 ## Errors
 
 Every failure raises `RunLabError` with:
 
-- `.status`: the HTTP status, or 0 when the server cannot be reached;
-- `.message`: the server's `error` text;
+- `.status`: the HTTP status, or 0 when RunLab cannot be reached;
+- `.message`: RunLab's `error` text;
 - `.request_id`: quote it when reporting a problem.
 
 | Status | Meaning |
