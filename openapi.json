@@ -1,0 +1,1788 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "RunLab research API",
+    "version": "0.1.0",
+    "summary": "Pre-register a comparison, record per-seed results, get a verdict you can quote.",
+    "description": "Did my change actually help? Record each seed's metric for two arms (the change and its\nbaseline), then ask for a verdict: a paired test across seeds with its 95 % confidence\ninterval, checked against the plan you registered before the seeds ran.\n\n**Auth.** Every call needs `Authorization: Bearer <token>`. The operator of your RunLab\nserver creates your user and gives you the server URL and token. The `agent` role (the\nusual one for researchers and their coding agents) may call every operation here.\n\n**Requests.** Bodies are JSON (`Content-Type: application/json`, at most 64 KiB). Every\nresponse carries `X-Request-Id` (yours, if you sent one); quote it when you report a\nproblem. Errors are `{\"error\": \"<what is wrong>\"}` with status 400 (bad input), 401 (no or\nbad token), 403 (role too low), 404 (no such id) or 413 (body too large).\n\n**Stability.** `/api/v1` changes only by adding fields and operations.\n\nPython client, guide and examples: https://github.com/omer-nachman/runlab-python",
+    "license": {
+      "name": "MIT",
+      "identifier": "MIT"
+    }
+  },
+  "externalDocs": {
+    "description": "Guide and Python client",
+    "url": "https://github.com/omer-nachman/runlab-python"
+  },
+  "servers": [
+    {
+      "url": "https://{host}",
+      "description": "Your RunLab server",
+      "variables": {
+        "host": {
+          "default": "runlab.example.com",
+          "description": "Your server's host name"
+        }
+      }
+    }
+  ],
+  "tags": [
+    {
+      "name": "account",
+      "description": "Check that your token works."
+    },
+    {
+      "name": "comparisons",
+      "description": "Plan, record and judge one A-vs-B comparison."
+    },
+    {
+      "name": "verdicts",
+      "description": "Read recorded verdicts and which of them a write-up may quote."
+    },
+    {
+      "name": "studies",
+      "description": "Let the server run the seeds of a planned comparison under a dollar cap."
+    }
+  ],
+  "paths": {
+    "/api/v1/me": {
+      "get": {
+        "operationId": "getMe",
+        "tags": [
+          "account"
+        ],
+        "summary": "Who your token belongs to",
+        "description": "The user name and role of the token. A cheap first call to check the URL and token.\n\nRole: viewer or above.",
+        "x-runlab-role": "viewer",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "name",
+                    "role"
+                  ],
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "viewer",
+                        "agent",
+                        "operator",
+                        "admin"
+                      ]
+                    }
+                  }
+                },
+                "example": {
+                  "name": "ada",
+                  "role": "agent"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No or bad token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/research/plans": {
+      "post": {
+        "operationId": "registerPlan",
+        "tags": [
+          "comparisons"
+        ],
+        "summary": "Pre-register a comparison",
+        "description": "Records, before any seed runs, what you will compare and how: the arms, the primary\nmetric, the hypothesis, the most seeds per arm and the stopping rule. The plan is\nhashed; `compareArms` later checks the comparison against it and reports deviations\n(`prereg` in its response). Registering again for the same (project, a, b, metric)\nneeds `amend`, a reason, and keeps every version.\n\n`power_check` estimates the power of `n_max` seeds from seeds already recorded for both\narms (a pilot); with none it is `unknown`.\n\nRole: agent or above.",
+        "x-runlab-role": "agent",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "plan",
+                    "power_check",
+                    "text"
+                  ],
+                  "properties": {
+                    "plan": {
+                      "type": "object",
+                      "required": [
+                        "project",
+                        "treatment",
+                        "baseline",
+                        "metric",
+                        "statement",
+                        "n_min",
+                        "n_max",
+                        "alpha",
+                        "direction",
+                        "stopping",
+                        "sha256",
+                        "versions",
+                        "registered_at"
+                      ],
+                      "properties": {
+                        "project": {
+                          "type": "string"
+                        },
+                        "treatment": {
+                          "type": "string",
+                          "description": "Arm `a`."
+                        },
+                        "baseline": {
+                          "type": "string",
+                          "description": "Arm `b`."
+                        },
+                        "metric": {
+                          "type": "string"
+                        },
+                        "statement": {
+                          "type": "string",
+                          "description": "The hypothesis you registered."
+                        },
+                        "n_min": {
+                          "type": "integer"
+                        },
+                        "n_max": {
+                          "type": "integer"
+                        },
+                        "alpha": {
+                          "type": "number"
+                        },
+                        "direction": {
+                          "type": "string",
+                          "enum": [
+                            "higher",
+                            "lower"
+                          ]
+                        },
+                        "stopping": {
+                          "type": "object",
+                          "required": [
+                            "rule"
+                          ],
+                          "properties": {
+                            "rule": {
+                              "type": "string",
+                              "enum": [
+                                "msprt",
+                                "fixed"
+                              ]
+                            }
+                          }
+                        },
+                        "sha256": {
+                          "type": "string",
+                          "description": "Hash of the plan's terms."
+                        },
+                        "versions": {
+                          "type": "integer",
+                          "description": "How many times it was registered or amended."
+                        },
+                        "registered_at": {
+                          "type": "number",
+                          "description": "Unix seconds."
+                        }
+                      }
+                    },
+                    "power_check": {
+                      "type": "object",
+                      "required": [
+                        "result",
+                        "n_max",
+                        "pilot_seeds",
+                        "min_power"
+                      ],
+                      "properties": {
+                        "result": {
+                          "type": "string",
+                          "enum": [
+                            "adequate",
+                            "underpowered",
+                            "unknown"
+                          ]
+                        },
+                        "n_max": {
+                          "type": "integer"
+                        },
+                        "pilot_seeds": {
+                          "type": "integer",
+                          "description": "Seeds both arms already had."
+                        },
+                        "min_power": {
+                          "type": "number",
+                          "description": "Power the check asks for (0.8)."
+                        },
+                        "power": {
+                          "type": "number",
+                          "description": "Estimated power at n_max (with a pilot)."
+                        },
+                        "seeds_needed": {
+                          "type": "integer",
+                          "description": "Seeds per arm for min_power (with a pilot)."
+                        },
+                        "why": {
+                          "type": "string",
+                          "description": "Why the result is unknown."
+                        }
+                      }
+                    },
+                    "text": {
+                      "type": "string",
+                      "description": "The plan in words."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad input; `error` says what is wrong.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No or bad token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token's role is below agent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Body over 64 KiB.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "project": {
+                    "type": "string",
+                    "description": "Your project name (case-insensitive), e.g. `resnet-aug`."
+                  },
+                  "a": {
+                    "type": "string",
+                    "description": "The treatment arm: the experiment name of your change."
+                  },
+                  "b": {
+                    "type": "string",
+                    "description": "The baseline arm."
+                  },
+                  "metric": {
+                    "type": "string",
+                    "description": "The primary metric, e.g. `acc` or `val_loss`."
+                  },
+                  "hypothesis": {
+                    "type": "string",
+                    "description": "What you expect, in words."
+                  },
+                  "n_max": {
+                    "type": "integer",
+                    "description": "Most seeds per arm you will run."
+                  },
+                  "n_min": {
+                    "type": "integer",
+                    "description": "Fewest seeds per arm before a decision (default 2)."
+                  },
+                  "alpha": {
+                    "type": "number",
+                    "description": "Significance level (default 0.05)."
+                  },
+                  "stopping": {
+                    "type": "string",
+                    "enum": [
+                      "msprt",
+                      "fixed"
+                    ],
+                    "description": "`msprt` (default: an always-valid sequential test; required by startStudy) or `fixed` (one compareArms call after all `n_max` seeds ran)."
+                  },
+                  "better": {
+                    "type": "string",
+                    "enum": [
+                      "auto",
+                      "higher",
+                      "lower"
+                    ],
+                    "description": "`higher`, `lower` or `auto` (default: lower for names with loss, error, err, perplexity, ppl, wer, cer, mse, mae, rmse, nll, latency, fid, regret; else higher)."
+                  },
+                  "amend": {
+                    "type": "string",
+                    "description": "Why the plan changes; required to replace an existing plan."
+                  }
+                },
+                "required": [
+                  "project",
+                  "a",
+                  "b",
+                  "metric",
+                  "hypothesis",
+                  "n_max"
+                ]
+              },
+              "example": {
+                "project": "resnet-aug",
+                "a": "mixup",
+                "b": "baseline",
+                "metric": "acc",
+                "hypothesis": "mixup raises top-1 accuracy",
+                "n_max": 10,
+                "stopping": "fixed"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/research/results": {
+      "post": {
+        "operationId": "recordResults",
+        "tags": [
+          "comparisons"
+        ],
+        "summary": "Record per-seed results",
+        "description": "Stores `RESULT:` lines, one metric value of one arm on one seed per line:\n\n    RESULT: <experiment> <metric>=<number> seed=<n> [<param>=<value> ...]\n\nNames use letters, digits, `_`, `.` and `-` (experiment names start with a letter).\nLines that do not start with `RESULT:` are ignored, so you can send a training log as\nis. If any RESULT line is malformed nothing is stored (400). Sending the same line again\nstores nothing (`already`), so retrying is safe.\n\nKeep an arm's params identical across its seeds: different params make an arm several\nconfigurations, and a comparison whose arms differ by more than 1.25x in configurations\nis refused (`refused_by: equal_budget`).\n\nRole: agent or above.",
+        "x-runlab-role": "agent",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "project",
+                    "stored",
+                    "already"
+                  ],
+                  "properties": {
+                    "project": {
+                      "type": "string"
+                    },
+                    "stored": {
+                      "type": "integer",
+                      "description": "New lines stored."
+                    },
+                    "already": {
+                      "type": "integer",
+                      "description": "Lines the server had already."
+                    }
+                  }
+                },
+                "example": {
+                  "project": "resnet-aug",
+                  "stored": 2,
+                  "already": 0
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad input; `error` says what is wrong.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No or bad token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token's role is below agent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Body over 64 KiB.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "project": {
+                    "type": "string",
+                    "description": "Your project name (case-insensitive)."
+                  },
+                  "results": {
+                    "type": "string",
+                    "description": "The lines, newline-separated."
+                  }
+                },
+                "required": [
+                  "project",
+                  "results"
+                ]
+              },
+              "example": {
+                "project": "resnet-aug",
+                "results": "RESULT: mixup acc=0.912 seed=0\nRESULT: baseline acc=0.897 seed=0"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/research/compare": {
+      "post": {
+        "operationId": "compareArms",
+        "tags": [
+          "comparisons"
+        ],
+        "summary": "Compare two arms and record the verdict",
+        "description": "Tests arm `a` against arm `b` on `metric`. With at least 2 seeds both arms share it is a\npaired t-test on the per-seed differences a − b (else Welch's t-test), with a 95 %\nconfidence interval. Before testing, checks run that can refuse the comparison\n(verdict `refused`, `refused_by`, `why`), e.g. unequal tuning budgets.\n\nEach call with new data is recorded as a look. Call it once, when the planned seeds have\nrun: a p-value read again and again as seeds come in no longer holds its alpha (the\nresponse warns `peeking`). For valid early stopping, run a study.\n\nAn unknown project, arm or metric is a 400 that names the closest match.\n\nRole: agent or above.",
+        "x-runlab-role": "agent",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "project",
+                    "a",
+                    "b",
+                    "metric",
+                    "verdict"
+                  ],
+                  "properties": {
+                    "project": {
+                      "type": "string"
+                    },
+                    "a": {
+                      "type": "string"
+                    },
+                    "b": {
+                      "type": "string"
+                    },
+                    "metric": {
+                      "type": "string"
+                    },
+                    "verdict": {
+                      "$ref": "#/components/schemas/VerdictCode"
+                    },
+                    "text": {
+                      "type": "string",
+                      "description": "The verdict and its numbers in words."
+                    },
+                    "diff": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "description": "Mean of a − b over the seeds (positive: a scored higher)."
+                    },
+                    "ci": {
+                      "$ref": "#/components/schemas/CI"
+                    },
+                    "p": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "description": "Two-sided p-value; null with fewer than 2 seeds."
+                    },
+                    "test": {
+                      "type": "string",
+                      "description": "`paired_t` (seeds matched) or `welch`."
+                    },
+                    "n": {
+                      "type": "integer",
+                      "description": "Seed pairs (paired) or the smaller arm's seeds."
+                    },
+                    "n_a": {
+                      "type": "integer"
+                    },
+                    "n_b": {
+                      "type": "integer"
+                    },
+                    "alpha": {
+                      "type": "number"
+                    },
+                    "lower_better": {
+                      "type": "boolean"
+                    },
+                    "looks": {
+                      "type": "integer",
+                      "description": "Distinct looks at this pair so far."
+                    },
+                    "warnings": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Warning"
+                      }
+                    },
+                    "prereg": {
+                      "type": "object",
+                      "description": "How the comparison matches the registered plan.",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "ok",
+                            "deviation",
+                            "missing",
+                            "tampered"
+                          ],
+                          "description": "`ok`; `deviation` (see `issues`, e.g. analysed before `n_max` seeds, or the plan was registered after more than 3 seeds were seen); `missing` (no plan for this pair); `tampered` (the stored plan no longer matches its hash)."
+                        },
+                        "ok": {
+                          "type": "boolean"
+                        },
+                        "sha256": {
+                          "type": "string",
+                          "description": "The plan's hash."
+                        },
+                        "issues": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/Warning"
+                          }
+                        }
+                      }
+                    },
+                    "refused_by": {
+                      "type": "string",
+                      "description": "The check that refused (only when refused)."
+                    },
+                    "why": {
+                      "type": "string",
+                      "description": "What to fix (only when refused)."
+                    }
+                  }
+                },
+                "example": {
+                  "project": "resnet-aug",
+                  "a": "mixup",
+                  "b": "baseline",
+                  "metric": "acc",
+                  "verdict": "a_better",
+                  "diff": 0.0178,
+                  "ci": [
+                    0.0094,
+                    0.0262
+                  ],
+                  "p": 0.00098,
+                  "test": "paired_t",
+                  "n": 10,
+                  "n_a": 10,
+                  "n_b": 10,
+                  "alpha": 0.05,
+                  "lower_better": false,
+                  "looks": 1,
+                  "warnings": [],
+                  "prereg": {
+                    "status": "ok",
+                    "ok": true
+                  },
+                  "text": "mixup vs baseline on acc (higher is better): mixup is better\n  paired_t: diff +0.0178 [95% CI +0.0094, +0.0262], p=0.00098, n=10 (A 10, B 10)"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad input; `error` says what is wrong.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No or bad token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token's role is below agent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Body over 64 KiB.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "project": {
+                    "type": "string",
+                    "description": "Your project name (case-insensitive)."
+                  },
+                  "a": {
+                    "type": "string",
+                    "description": "The treatment arm."
+                  },
+                  "b": {
+                    "type": "string",
+                    "description": "The baseline arm."
+                  },
+                  "metric": {
+                    "type": "string",
+                    "description": "The metric to test."
+                  },
+                  "better": {
+                    "type": "string",
+                    "enum": [
+                      "auto",
+                      "higher",
+                      "lower"
+                    ],
+                    "description": "`higher`, `lower` or `auto` (default, from the metric name; see registerPlan)."
+                  },
+                  "alpha": {
+                    "type": "number",
+                    "description": "Significance level (default 0.05)."
+                  },
+                  "margin": {
+                    "type": "number",
+                    "description": "Smallest difference that matters, in the metric's units. With it, a non-significant result can be `equivalent` or `non_inferior`."
+                  }
+                },
+                "required": [
+                  "project",
+                  "a",
+                  "b",
+                  "metric"
+                ]
+              },
+              "example": {
+                "project": "resnet-aug",
+                "a": "mixup",
+                "b": "baseline",
+                "metric": "acc"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/research/verdicts": {
+      "get": {
+        "operationId": "listVerdicts",
+        "tags": [
+          "verdicts"
+        ],
+        "summary": "List recorded verdicts",
+        "description": "Recorded verdicts, newest first. A verdict is `stale` when data or a run under it was\nmarked bad since. With `recheck=1` the latest verdict of each pair is also judged again\non today's results (not counted as a look), in `recheck`.\n\nRole: viewer or above.",
+        "x-runlab-role": "viewer",
+        "parameters": [
+          {
+            "name": "project",
+            "in": "query",
+            "required": false,
+            "description": "Only this project.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "At most this many (1-500).",
+            "schema": {
+              "type": "integer",
+              "default": 50
+            }
+          },
+          {
+            "name": "recheck",
+            "in": "query",
+            "required": false,
+            "description": "`1` to judge each pair again on today's results.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "0",
+                "1"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "verdicts",
+                    "stale"
+                  ],
+                  "properties": {
+                    "project": {
+                      "type": "string"
+                    },
+                    "stale": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ],
+                      "description": "How many listed verdicts are stale; null when unknown."
+                    },
+                    "recheck": {
+                      "type": "object",
+                      "description": "Only with `recheck=1`.",
+                      "required": [
+                        "unchanged",
+                        "inputs_changed",
+                        "flipped",
+                        "pairs"
+                      ],
+                      "properties": {
+                        "unchanged": {
+                          "type": "integer"
+                        },
+                        "inputs_changed": {
+                          "type": "integer",
+                          "description": "Same call on different RESULTs (seeds added or dropped)."
+                        },
+                        "flipped": {
+                          "type": "integer",
+                          "description": "Another call today."
+                        },
+                        "pairs": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "a",
+                              "b",
+                              "metric",
+                              "was",
+                              "now",
+                              "result"
+                            ],
+                            "properties": {
+                              "a": {
+                                "type": "string"
+                              },
+                              "b": {
+                                "type": "string"
+                              },
+                              "metric": {
+                                "type": "string"
+                              },
+                              "was": {
+                                "type": "string",
+                                "description": "The recorded verdict."
+                              },
+                              "now": {
+                                "type": "string",
+                                "description": "Today's verdict."
+                              },
+                              "result": {
+                                "type": "string",
+                                "enum": [
+                                  "unchanged",
+                                  "inputs_changed",
+                                  "flipped"
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "verdicts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "ts",
+                          "project",
+                          "a",
+                          "b",
+                          "metric",
+                          "verdict",
+                          "n_a",
+                          "n_b",
+                          "text"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "integer",
+                            "description": "Use with getVerdict."
+                          },
+                          "ts": {
+                            "type": "number",
+                            "description": "Unix seconds."
+                          },
+                          "project": {
+                            "type": "string"
+                          },
+                          "a": {
+                            "type": "string"
+                          },
+                          "b": {
+                            "type": "string"
+                          },
+                          "metric": {
+                            "type": "string"
+                          },
+                          "verdict": {
+                            "$ref": "#/components/schemas/VerdictCode"
+                          },
+                          "diff": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "ci": {
+                            "$ref": "#/components/schemas/CI"
+                          },
+                          "p": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "n_a": {
+                            "type": "integer"
+                          },
+                          "n_b": {
+                            "type": "integer"
+                          },
+                          "text": {
+                            "type": "string"
+                          },
+                          "stale": {
+                            "type": "boolean",
+                            "description": "Absent when the server could not tell."
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad input; `error` says what is wrong.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No or bad token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/verdicts/{id}": {
+      "get": {
+        "operationId": "getVerdict",
+        "tags": [
+          "verdicts"
+        ],
+        "summary": "One verdict in full",
+        "description": "Everything behind one recorded verdict: each seed's value per arm, the difference\nre-derived from those values (`check`), and the verdict judged again on today's\nresults (`now.status`: `unchanged`, `inputs_changed` or `flipped`).\n\nRole: viewer or above.",
+        "x-runlab-role": "viewer",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The verdict id, from listVerdicts or getResearchReport.",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "project",
+                    "a",
+                    "b",
+                    "metric",
+                    "verdict",
+                    "words",
+                    "seeds",
+                    "check",
+                    "now"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "integer"
+                    },
+                    "project": {
+                      "type": "string"
+                    },
+                    "a": {
+                      "type": "string"
+                    },
+                    "b": {
+                      "type": "string"
+                    },
+                    "metric": {
+                      "type": "string"
+                    },
+                    "verdict": {
+                      "$ref": "#/components/schemas/VerdictCode"
+                    },
+                    "words": {
+                      "type": "string",
+                      "description": "The verdict in a few words."
+                    },
+                    "ts": {
+                      "type": "number"
+                    },
+                    "seeds": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "seed",
+                          "a",
+                          "b",
+                          "d"
+                        ],
+                        "properties": {
+                          "seed": {
+                            "type": "integer"
+                          },
+                          "a": {
+                            "type": "number"
+                          },
+                          "b": {
+                            "type": "number"
+                          },
+                          "d": {
+                            "type": "number",
+                            "description": "a − b on this seed."
+                          }
+                        }
+                      }
+                    },
+                    "check": {
+                      "type": "object",
+                      "required": [
+                        "diff",
+                        "agrees"
+                      ],
+                      "properties": {
+                        "diff": {
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "description": "The difference re-derived from `seeds`."
+                        },
+                        "agrees": {
+                          "type": "boolean",
+                          "description": "Whether it matches the recorded `diff`."
+                        }
+                      }
+                    },
+                    "now": {
+                      "type": "object",
+                      "required": [
+                        "status"
+                      ],
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "unchanged",
+                            "inputs_changed",
+                            "flipped",
+                            "unknown"
+                          ],
+                          "description": "`unknown`: it could not be judged again."
+                        },
+                        "verdict": {
+                          "type": "string",
+                          "description": "Today's verdict (absent when unknown)."
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad input; `error` says what is wrong.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No or bad token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/research/report": {
+      "get": {
+        "operationId": "getResearchReport",
+        "tags": [
+          "verdicts"
+        ],
+        "summary": "Which verdicts you can quote",
+        "description": "For each (a, b, metric) pair of a project, its latest verdict and whether a write-up\nmay quote it: `quotable`, `quotable_with_caveat` (tentative, e.g. fewer than 5 seeds per\narm) or `not_quotable`, with why and what to do next. A win must survive the\nBenjamini-Hochberg false discovery rate `q` across every pair of the project (`m`\ncounts them all, whatever the filter). Each claim carries a ready-made `quote`.\n\nRole: viewer or above.",
+        "x-runlab-role": "viewer",
+        "parameters": [
+          {
+            "name": "project",
+            "in": "query",
+            "required": false,
+            "description": "The project (omit for every project).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "arm",
+            "in": "query",
+            "required": false,
+            "description": "Only claims about this arm (either side).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "metric",
+            "in": "query",
+            "required": false,
+            "description": "Only claims on this metric.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "False discovery rate (default 0.05).",
+            "schema": {
+              "type": "number",
+              "default": 0.05
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "project",
+                    "m",
+                    "claims",
+                    "quotable",
+                    "quotable_with_caveat",
+                    "not_quotable",
+                    "text"
+                  ],
+                  "properties": {
+                    "project": {
+                      "type": "string"
+                    },
+                    "m": {
+                      "type": "integer",
+                      "description": "Pairs counted for the FDR correction."
+                    },
+                    "quotable": {
+                      "type": "integer"
+                    },
+                    "quotable_with_caveat": {
+                      "type": "integer"
+                    },
+                    "not_quotable": {
+                      "type": "integer"
+                    },
+                    "claims": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "a",
+                          "b",
+                          "metric",
+                          "verdict",
+                          "status",
+                          "why",
+                          "caveats",
+                          "next",
+                          "quote"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "integer",
+                            "description": "The verdict id."
+                          },
+                          "a": {
+                            "type": "string"
+                          },
+                          "b": {
+                            "type": "string"
+                          },
+                          "metric": {
+                            "type": "string"
+                          },
+                          "verdict": {
+                            "$ref": "#/components/schemas/VerdictCode"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "quotable",
+                              "quotable_with_caveat",
+                              "not_quotable"
+                            ]
+                          },
+                          "why": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "description": "Why it is not quotable."
+                          },
+                          "caveats": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "next": {
+                            "type": "string",
+                            "description": "What to do next."
+                          },
+                          "quote": {
+                            "type": "string",
+                            "description": "The sentence to quote: a − b, 95 % CI, test, p, n."
+                          }
+                        }
+                      }
+                    },
+                    "text": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad input; `error` says what is wrong.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No or bad token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/research/studies": {
+      "post": {
+        "operationId": "startStudy",
+        "tags": [
+          "studies"
+        ],
+        "summary": "Run a planned comparison's seeds on the server",
+        "description": "The server runs seeds of both arms, one pair at a time, with the plan's sequential test\n(register the plan with `stopping: msprt` first), and stops as soon as the evidence\ndecides, at `n_max`, or at `max_usd`, whichever comes first. A watchdog kills it at the\ncap.\n\n`command` names one of the training commands your server's operator set up; the\noperator also sets the price per hour and the caps. Every check runs before anything\nstarts: a refusal is a 400 whose `error` says why (studies off, unknown command, no\nplan, cap or budget exceeded, too many running) and nothing is spent.\n\nRole: agent or above.",
+        "x-runlab-role": "agent",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Study"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad input; `error` says what is wrong.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No or bad token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token's role is below agent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Body over 64 KiB.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "project": {
+                    "type": "string",
+                    "description": "Your project name (case-insensitive)."
+                  },
+                  "command": {
+                    "type": "string",
+                    "description": "The name of an operator-defined command."
+                  },
+                  "a": {
+                    "type": "string",
+                    "description": "The treatment arm."
+                  },
+                  "b": {
+                    "type": "string",
+                    "description": "The baseline arm."
+                  },
+                  "metric": {
+                    "type": "string",
+                    "description": "The planned metric."
+                  },
+                  "max_usd": {
+                    "type": "number",
+                    "description": "The study's hard dollar cap."
+                  },
+                  "params": {
+                    "type": "object",
+                    "description": "Values for the command's placeholders, for both arms, e.g. `{\"epochs\": \"10\"}`. Letters, digits and `_.:+=-` only."
+                  },
+                  "arm_params": {
+                    "type": "object",
+                    "description": "Per-arm values, keyed by arm name, e.g. `{\"mixup\": {\"alpha\": \"0.2\"}}`."
+                  }
+                },
+                "required": [
+                  "project",
+                  "command",
+                  "a",
+                  "b",
+                  "metric",
+                  "max_usd"
+                ]
+              },
+              "example": {
+                "project": "resnet-aug",
+                "command": "train",
+                "a": "mixup",
+                "b": "baseline",
+                "metric": "acc",
+                "max_usd": 5
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "listStudies",
+        "tags": [
+          "studies"
+        ],
+        "summary": "List studies",
+        "description": "Studies, newest first.\n\nRole: viewer or above.",
+        "x-runlab-role": "viewer",
+        "parameters": [
+          {
+            "name": "project",
+            "in": "query",
+            "required": false,
+            "description": "Only this project.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "At most this many (1-500).",
+            "schema": {
+              "type": "integer",
+              "default": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "studies"
+                  ],
+                  "properties": {
+                    "studies": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Study"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad input; `error` says what is wrong.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No or bad token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/research/studies/{key}": {
+      "get": {
+        "operationId": "getStudy",
+        "tags": [
+          "studies"
+        ],
+        "summary": "One study",
+        "description": "One study by id; poll it until `state` is no longer `running`.\n\nRole: viewer or above.",
+        "x-runlab-role": "viewer",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "description": "The study id, `st_...`.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Study"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad input; `error` says what is wrong.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No or bad token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "What is wrong",
+            "in words.": null
+          }
+        }
+      },
+      "Warning": {
+        "type": "object",
+        "required": [
+          "kind",
+          "message"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "description": "A short code, e.g. `peeking`, `outlier`, `metric_shopping`."
+          },
+          "message": {
+            "type": "string",
+            "description": "What it means for this verdict and what to do."
+          }
+        }
+      },
+      "CI": {
+        "type": "array",
+        "description": "95 % confidence interval of `diff`, [low, high]; null bounds when not computable.",
+        "items": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "minItems": 2,
+        "maxItems": 2
+      },
+      "VerdictCode": {
+        "type": "string",
+        "enum": [
+          "a_better",
+          "b_better",
+          "no_detectable_difference",
+          "equivalent",
+          "non_inferior",
+          "insufficient",
+          "refused"
+        ],
+        "description": "`a_better` / `b_better`: p < alpha and the difference favours that arm (direction from\n`better`). `no_detectable_difference`: p >= alpha; not evidence that the arms are equal.\n`equivalent`: the CI lies inside ±`margin`. `non_inferior`: arm a is worse than b by\nless than `margin`. `insufficient`: fewer than 2 seeds in an arm, so no test. `refused`:\na check (`refused_by`) would make any verdict untrustworthy; `why` says what to fix.\n"
+      },
+      "Study": {
+        "type": "object",
+        "required": [
+          "id",
+          "state",
+          "project",
+          "a",
+          "b",
+          "metric",
+          "command",
+          "max_usd",
+          "started_at",
+          "deadline_at",
+          "detail"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Study id, `st_...`."
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "running",
+              "decided",
+              "undecided",
+              "budget",
+              "killed",
+              "failed",
+              "lost",
+              "refused"
+            ],
+            "description": "`running`; `decided` (the sequential test stopped: see `decision` and `winner`);\n`undecided` (n_max seeds ran without a decision); `budget` (the run's compute\nbudget was spent before a decision); `killed` (the watchdog stopped it at the\ndollar cap);\n`failed` (the command failed or printed no result, see `detail`); `lost` (still\nmarked running well past its deadline, e.g. after a server restart); `refused`.\n"
+          },
+          "project": {
+            "type": "string"
+          },
+          "a": {
+            "type": "string"
+          },
+          "b": {
+            "type": "string"
+          },
+          "metric": {
+            "type": "string"
+          },
+          "command": {
+            "type": "string",
+            "description": "The operator-defined command name it runs."
+          },
+          "max_usd": {
+            "type": "number",
+            "description": "The hard dollar cap."
+          },
+          "usd_per_hour": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "The price it is charged at."
+          },
+          "n_max": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Most seeds per arm (from the plan)."
+          },
+          "started_at": {
+            "type": "number",
+            "description": "Unix seconds."
+          },
+          "deadline_at": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Unix seconds when the cap is reached at its price."
+          },
+          "ended_at": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Unix seconds; null while running."
+          },
+          "decision": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Once ended: `A` or `B` (that arm won), `futile` (no detectable difference at this budget), `equivalent`, `budget` or `continue` (undecided)."
+          },
+          "winner": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The winning arm's name; null unless `decision` is `A` or `B`."
+          },
+          "pairs": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Seed pairs run."
+          },
+          "usd": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Dollars spent."
+          },
+          "detail": {
+            "type": "string",
+            "description": "Why it failed or was refused; empty otherwise."
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Your API token."
+      }
+    }
+  },
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ]
+}

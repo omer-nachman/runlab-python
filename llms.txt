@@ -1,0 +1,22 @@
+# runlab-client
+
+> Python client and HTTP spec for the RunLab research API: pre-register an A-vs-B
+> comparison, record each seed's metric, and get a verdict. The verdict comes from a paired
+> test with a 95 % confidence interval, checked against the plan. It refuses a misleading
+> comparison and says which wins a write-up may quote. The client uses only the standard
+> library; you need a RunLab server URL and token (env RUNLAB_URL, RUNLAB_TOKEN).
+
+## Docs
+
+- [README](README.md): quickstart, the loop, verdict codes, studies, errors, client reference
+- [AGENTS.md](AGENTS.md): how a coding agent should run the loop and report the result
+- [OpenAPI 3.1 spec](openapi.json): 10 operations under /api/v1, bearer-token auth
+
+## Examples
+
+- [quickstart.py](examples/quickstart.py): plan, 10 seeds per arm, compare
+- [curl.sh](examples/curl.sh): the same loop with curl
+
+## Optional
+
+- [Client source](src/runlab_client/__init__.py): one file, about 220 lines

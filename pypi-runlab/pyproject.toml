@@ -1,0 +1,20 @@
+# The PyPI name `runlab`: no code; installing it installs runlab-client.
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "runlab"
+version = "0.0.1"
+description = "RunLab's Python client. This package has no code: it installs runlab-client."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [{ name = "omer-nachman" }]
+dependencies = ["runlab-client>=0.1.0"]
+
+[project.urls]
+Homepage = "https://github.com/omer-nachman/runlab-python"
+
+[tool.setuptools]
+packages = []
