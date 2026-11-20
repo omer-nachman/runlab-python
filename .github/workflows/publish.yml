@@ -9,12 +9,20 @@ name: publish
 # build    always: PyPA build, `twine check --strict`, then a fresh venv installs
 #          both wheels offline; runlab_client must import, and the runlab package
 #          must contain no module
-# publish  only when run by hand with publish=true, by PyPI trusted publishing
+# publish  automatically when a push to main changes a version (pyproject.toml or
+#          pypi-runlab/pyproject.toml) or this workflow, and by hand with
+#          publish=true. Only reviewed files reach main. PyPI trusted publishing
 #          (this workflow's GitHub OIDC identity; no API token exists). One
 #          environment per PyPI project, because PyPI takes one pending publisher
 #          per (owner, repository, workflow, environment). skip-existing makes a
-#          re-run harmless; a new release needs a new version number.
+#          run with an already-published version a no-op: a release is a version bump.
 on:
+  push:
+    branches: [main]
+    paths:
+      - pyproject.toml
+      - pypi-runlab/pyproject.toml
+      - .github/workflows/publish.yml
   workflow_dispatch:
     inputs:
       publish:
@@ -70,7 +78,7 @@ jobs:
 
   publish-client:
     needs: build
-    if: inputs.publish
+    if: github.event_name == 'push' || inputs.publish
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment:
@@ -90,7 +98,7 @@ jobs:
 
   publish-runlab:
     needs: publish-client   # it depends on runlab-client, so that goes up first
-    if: inputs.publish
+    if: github.event_name == 'push' || inputs.publish
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment:
