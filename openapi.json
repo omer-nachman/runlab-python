@@ -1431,7 +1431,6 @@
                 },
                 "required": [
                   "project",
-                  "command",
                   "a",
                   "b",
                   "metric",
