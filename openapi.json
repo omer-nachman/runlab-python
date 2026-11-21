@@ -1334,7 +1334,7 @@
           "studies"
         ],
         "summary": "Let RunLab run a planned comparison's seeds",
-        "description": "RunLab runs seeds of both arms, one pair at a time, with the plan's sequential test\n(register the plan with `stopping: msprt` first), and stops as soon as the evidence\ndecides, at `n_max`, or at `max_usd`, whichever comes first. It never spends more than\n`max_usd`.\n\n`command` names the training command to run. Every check runs before anything starts:\na refusal is a 400 whose `error` says why (unknown command, no msprt plan, cap too\nhigh, too many running) and nothing is spent.\n\nRole: agent or above.",
+        "description": "RunLab runs seeds of both arms, one pair at a time, with the plan's sequential test\n(register the plan with `stopping: msprt` first), and stops as soon as the evidence\ndecides, at `n_max`, or at `max_usd`, whichever comes first. It never spends more than\n`max_usd`.\n\n`command` names the training command to run. Every check runs before anything starts:\na refusal is a 400 whose `error` says why (unknown command, no msprt plan, cap too\nhigh, too many running) and nothing is spent.\n\nWith `worker: true` the seeds run on your own machine instead: no `command`; give\n`usd_per_hour`, what an hour of that machine costs. `runlab worker` (or\n`RunLab.run_worker`) then asks workOnStudy for seed pairs, runs your training command\nfor both arms and posts the numbers until the study ends; each pair's reported run\ntime is charged against `max_usd`.\n\nRole: agent or above.",
         "x-runlab-role": "agent",
         "parameters": [],
         "responses": {
@@ -1402,7 +1402,7 @@
                   },
                   "command": {
                     "type": "string",
-                    "description": "One of your training command names."
+                    "description": "One of your training command names; required unless `worker` is true."
                   },
                   "a": {
                     "type": "string",
@@ -1427,6 +1427,14 @@
                   "arm_params": {
                     "type": "object",
                     "description": "Per-arm values, keyed by arm name, e.g. `{\"mixup\": {\"alpha\": \"0.2\"}}`."
+                  },
+                  "worker": {
+                    "type": "boolean",
+                    "description": "True: the seeds run on your machine (workOnStudy); default false."
+                  },
+                  "usd_per_hour": {
+                    "type": "number",
+                    "description": "With `worker`: what an hour of your machine costs, in dollars; each pair's run time is charged at it."
                   }
                 },
                 "required": [
@@ -1517,6 +1525,177 @@
                 "schema": {
                   "$ref": "#/components/schemas/Error"
                 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/research/studies/{key}/work": {
+      "post": {
+        "operationId": "workOnStudy",
+        "tags": [
+          "studies"
+        ],
+        "summary": "Get the next seed pair of a worker study, and post the last one",
+        "description": "For a study started with `worker: true`. Post a finished pair (`seed`, its RESULT\nlines in `results`, the arms that `failed`, its run time `wall_s`) and get the next\npair to run: its `seed`, the `arms` in run order (they alternate per seed) and the\n`params` of each arm. `pair` is null with `retry_after_s` while other workers hold\nevery open pair, and null once the study ended (its `state` says how). Without `seed`\nthe call only asks. A pair stays reserved for its `worker` for `lease_s` seconds\n(default 3600): ask again under the same name to get it back after a restart.\n\nThe plan's sequential test decides after each pair, exactly as for hosted studies; a\nstudy stops at `n_max` pairs and before the next pair would pass `max_usd` at the\nmean reported run time. A pair posted twice counts once. Bad input (another seed's or\nanother arm's lines, a seed outside the plan) is a 400 and stores nothing.\n\nRole: agent or above.",
+        "x-runlab-role": "agent",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "description": "The study id, `st_...`.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "study",
+                    "pair"
+                  ],
+                  "properties": {
+                    "study": {
+                      "$ref": "#/components/schemas/Study"
+                    },
+                    "pair": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "required": [
+                        "seed",
+                        "arms",
+                        "params"
+                      ],
+                      "properties": {
+                        "seed": {
+                          "type": "integer"
+                        },
+                        "arms": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "description": "Both arms, in the order to run them."
+                        },
+                        "params": {
+                          "type": "object",
+                          "description": "Placeholder values per arm, keyed by arm name."
+                        }
+                      }
+                    },
+                    "retry_after_s": {
+                      "type": "number",
+                      "description": "With a null `pair` while running: ask again after this many seconds."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad input; `error` says what is wrong.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No or bad token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token's role is below agent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Body over 64 KiB.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "worker": {
+                    "type": "string",
+                    "description": "This worker's name (letters, digits, `_.:-`); one name per machine or process."
+                  },
+                  "seed": {
+                    "type": "integer",
+                    "description": "The finished pair's seed; omit to only ask for a pair."
+                  },
+                  "results": {
+                    "type": "string",
+                    "description": "The pair's RESULT lines (resultLine), one per line, with this `seed`."
+                  },
+                  "failed": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Arms whose run failed or printed no value; the pair then counts as failed."
+                  },
+                  "wall_s": {
+                    "type": "number",
+                    "description": "Seconds the pair took to run, both arms; charged at `usd_per_hour`."
+                  },
+                  "lease_s": {
+                    "type": "number",
+                    "description": "Seconds the next pair stays reserved for this worker (at most 7 days)."
+                  }
+                },
+                "required": []
+              },
+              "example": {
+                "worker": "gpu-box-1",
+                "seed": 0,
+                "results": "RESULT experiment=mixup seed=0 acc=0.85\nRESULT experiment=baseline seed=0 acc=0.80",
+                "failed": [],
+                "wall_s": 412.5
               }
             }
           }
@@ -1677,7 +1856,7 @@
               "lost",
               "refused"
             ],
-            "description": "`running`; `decided` (the sequential test stopped: see `decision` and `winner`);\n`undecided` (n_max seeds ran without a decision); `budget` (the run's compute\nbudget was spent before a decision); `killed` (stopped at the dollar cap);\n`failed` (the command failed or printed no result, see `detail`); `lost` (stopped\nreporting well past its deadline); `refused`.\n"
+            "description": "`running`; `decided` (the sequential test stopped: see `decision` and `winner`);\n`undecided` (n_max seeds ran without a decision); `budget` (the compute budget was\nspent before a decision; on your machine: the next pair would pass `max_usd`);\n`killed` (stopped at the dollar cap);\n`failed` (the command failed or printed no result, see `detail`); `lost` (stopped\nreporting well past its deadline); `refused`.\n"
           },
           "project": {
             "type": "string"
@@ -1691,9 +1870,17 @@
           "metric": {
             "type": "string"
           },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "hosted",
+              "worker"
+            ],
+            "description": "`worker`: its seeds run on your machine (workOnStudy, `runlab worker`); `hosted`: RunLab runs them."
+          },
           "command": {
             "type": "string",
-            "description": "The training command name it runs."
+            "description": "The training command name it runs; empty when `mode` is `worker`."
           },
           "max_usd": {
             "type": "number",
@@ -1704,7 +1891,7 @@
               "number",
               "null"
             ],
-            "description": "The price it is charged at."
+            "description": "The price it is charged at; for `worker`, what an hour of your machine costs."
           },
           "n_max": {
             "type": [
@@ -1722,7 +1909,7 @@
               "number",
               "null"
             ],
-            "description": "Unix seconds when the cap is reached at its price."
+            "description": "Unix seconds when the cap is reached at its price; null for `worker` (its cap counts reported run time)."
           },
           "ended_at": {
             "type": [

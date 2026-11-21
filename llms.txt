@@ -8,7 +8,7 @@
 
 ## Docs
 
-- [README](README.md): quickstart, the loop, verdict codes, studies, errors, client reference
+- [README](README.md): quickstart, the loop, verdict codes, studies (also `runlab worker`: seeds on your machine), errors, client reference
 - [AGENTS.md](AGENTS.md): how a coding agent should run the loop and report the result
 - [OpenAPI 3.1 spec](openapi.json): 10 operations under /api/v1, bearer-token auth
 

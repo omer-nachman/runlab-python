@@ -36,6 +36,9 @@ interval, checked against a plan registered before the seeds ran.
   A second look on more data warns `peeking` and makes the pair `not_quotable` in
   `report()`. To stop early, use a study:
   plan with `stopping="msprt"`, then call `start_study(...)` and `wait_study(id)`.
+  To run the seeds on this machine instead, run `runlab worker --project ... --a ... --b ...
+  --metric ... --max-usd ... --usd-per-hour ... --cmd "<train command with {arm} {seed}>"`;
+  the command must print `<metric>=<value>`.
 - `no_detectable_difference` is not "no effect". Say "no detectable difference at n seeds".
   If the user cares about equality, compare with `margin=<smallest difference that
   matters>`.

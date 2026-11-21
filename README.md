@@ -155,11 +155,38 @@ print(s["state"], s["winner"], s["pairs"], s["usd"])                  # e.g. dec
   | `running` | Still running seeds. |
   | `decided` | The sequential test stopped. `decision` is `A` or `B` (`winner` names the arm), or `futile` (no detectable difference at this budget) or `equivalent` (`winner` is null). |
   | `undecided` | `n_max` seeds ran without a decision. |
-  | `budget` | The run's compute budget was spent before a decision. |
+  | `budget` | The compute budget was spent before a decision (your own machine: the next pair would pass `max_usd`). |
   | `killed` | Stopped at the dollar cap. |
   | `failed` | The command failed or printed no result; see `detail`. |
   | `lost` | Stopped reporting long past its deadline. |
   | `refused` | Refused at the start (that call raised a 400); listed for the record. |
+
+### Run the seeds on your own machine
+
+Your GPU box, laptop or cluster node can run the seeds instead: RunLab hands out seed pairs,
+decides with the same sequential test, and stops at `n_max` or before the next pair would pass
+your dollar cap. Your training command prints `<metric>=<value>`; `{arm}`, `{seed}` and your
+params' names are filled in (no shell runs it).
+
+```bash
+pip install runlab-client
+export RUNLAB_URL=... RUNLAB_TOKEN=...
+runlab worker --project resnet-aug --a mixup --b baseline --metric acc \
+    --max-usd 5 --usd-per-hour 0.8 --param epochs=10 \
+    --cmd "python train.py --arm {arm} --seed {seed} --epochs {epochs}"
+# seed 0: mixup acc=0.853, baseline acc=0.801 (412.3 s)
+# ...
+# study st_...: decided (A, winner mixup) after 6 pairs, $0.5496
+```
+
+- `--usd-per-hour` is what an hour of your machine costs; each pair's run time is charged at
+  it, so `--max-usd` caps your own spend.
+- Start more workers with `--study st_...` (another terminal or machine): each gets its own
+  seeds. Give each a `--worker` name to get its open pair back after a restart.
+- A run that exits non-zero, prints no value or passes `--timeout` seconds counts as failed;
+  the pair is skipped, as when RunLab runs the seeds.
+- Each run's time is recorded next to its metric, as `wall_s` and `usd` of its arm and seed.
+- From Python: `s = rl.start_worker_study(...)`, then `rl.run_worker(s["id"], cmd)`.
 
 ## Errors
 
@@ -198,6 +225,9 @@ the decoded JSON of one operation in [openapi.json](openapi.json).
 | `report(project, *, arm="", metric="", q=0.05)` | `getResearchReport` | `claims`, the counts per status, `text` |
 | `start_study(project, command, a, b, metric, max_usd, *, params=None, arm_params=None)` | `startStudy` | the study |
 | `study(id)`, `studies(project="", limit=50)`, `wait_study(id, timeout, poll_s)` | `getStudy`, `listStudies` | the study, or a list of studies |
+| `start_worker_study(project, a, b, metric, max_usd, usd_per_hour, *, params=None, arm_params=None)` | `startStudy` | the study (`mode: worker`) |
+| `work(id, *, seed=None, results=None, failed=None, wall_s=None, worker=None, lease_s=None)` | `workOnStudy` | `study`, `pair` (`seed`, `arms`, `params`) or null, `retry_after_s` |
+| `run_worker(id, cmd, *, worker=None, cwd=None, timeout=None, lease_s=None, log=None)` | `workOnStudy` | the ended study, after running its pairs here |
 | `result_line(arm, metric, value, *, seed=None, **params)` | none | one `RESULT:` line, for `record()` |
 
 ## Coding agents

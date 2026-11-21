@@ -11,6 +11,12 @@
     v = rl.compare("demo", "treatment", "baseline", "acc")
     print(v["verdict"], v["text"])
 
+Seeds on your own machine: `runlab worker` (or `RunLab.run_worker`) runs both arms of each
+seed pair RunLab hands out and posts the numbers back, until the plan's sequential test decides:
+
+    runlab worker --project demo --a treatment --b baseline --metric acc --max-usd 5 \
+        --usd-per-hour 0.8 --cmd "python train.py --arm {arm} --seed {seed}"
+
 Standard library only, Python 3.10+. Each method is one operation of openapi.json.
 Errors raise RunLabError with the HTTP status, RunLab's message and the request id.
 GET requests are retried on connection errors and on 429, 502, 503 and 504 with exponential
@@ -21,6 +27,11 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import shlex
+import socket
+import subprocess
+import sys
 import time
 import urllib.error
 import urllib.parse
@@ -216,6 +227,97 @@ class RunLab:
         return self.request("GET", "/research/studies", params={
             "project": project or None, "limit": limit})["studies"]
 
+    def start_worker_study(self, project: str, a: str, b: str, metric: str, max_usd: float,
+                           usd_per_hour: float, *, params: dict[str, Any] | None = None,
+                           arm_params: dict[str, dict[str, Any]] | None = None
+                           ) -> dict[str, Any]:
+        """A study whose seeds run on your machine (`run_worker`, `runlab worker`), stopped by
+        the plan's sequential test, at `n_max` or before a pair would pass `max_usd`, with
+        each pair's run time charged at `usd_per_hour` (what an hour of your machine costs).
+        `params` / `arm_params` are handed back with each pair to fill your command."""
+        body: dict[str, Any] = {"project": project, "a": a, "b": b, "metric": metric,
+                                "max_usd": max_usd, "usd_per_hour": usd_per_hour,
+                                "worker": True}
+        if params:
+            body["params"] = params
+        if arm_params:
+            body["arm_params"] = arm_params
+        return self.request("POST", "/research/studies", body)
+
+    def work(self, study_id: str, *, seed: int | None = None,
+             results: str | list[str] | None = None, failed: list[str] | None = None,
+             wall_s: float | None = None, worker: str | None = None,
+             lease_s: float | None = None) -> dict[str, Any]:
+        """Post a finished pair (its `seed`, RESULT lines, the arms that `failed`, its run
+        time `wall_s`) and get `{"study", "pair"}`: the next pair to run (`seed`, `arms` in
+        run order, `params` per arm), or None with `retry_after_s` while other workers hold
+        the open pairs, or None once the study ended. Without `seed`, only asks."""
+        body: dict[str, Any] = {"worker": worker or _worker_name()}
+        if lease_s is not None:
+            body["lease_s"] = lease_s
+        if seed is not None:
+            body.update(seed=int(seed), failed=list(failed or []),
+                        results=results if isinstance(results, str)
+                        else "\n".join(results or []), wall_s=wall_s)
+        return self.request("POST", f"/research/studies/{urllib.parse.quote(study_id, safe='')}"
+                                    "/work", body)
+
+    def run_worker(self, study_id: str, cmd: str, *, worker: str | None = None,
+                   cwd: str | None = None, timeout: float | None = None,
+                   lease_s: float | None = None, log: Any = None) -> dict[str, Any]:
+        """Run the study's seed pairs here until it ends; returns the ended study.
+
+        `cmd` is your training command with `{arm}`, `{seed}` and your params' names as
+        placeholders; it runs without a shell, and the last `<metric>=<value>` (or `:`) on
+        its stdout is the arm's result (stderr passes through to your terminal). A run that
+        exits non-zero, prints no value or passes `timeout` seconds counts as failed. Each
+        run's time is posted too, as `wall_s` and `usd` results of its arm and seed, so a
+        comparison can check that both arms got the same compute. `worker` names this worker:
+        the same name gets its open pair back after a restart. `log` (a callable) receives one
+        line per pair."""
+        template = shlex.split(cmd)
+        if not template:
+            raise ValueError("cmd is empty")
+        name = worker or _worker_name()
+        out = self.work(study_id, worker=name, lease_s=lease_s)
+        while True:
+            study, pair = out["study"], out.get("pair")
+            if pair is None:
+                if study.get("state") != "running":
+                    return study
+                time.sleep(min(max(float(out.get("retry_after_s") or 10.0), 1.0), 60.0))
+                out = self.work(study_id, worker=name, lease_s=lease_s)
+                continue
+            seed, metric = int(pair["seed"]), str(study["metric"])
+            rate = float(study.get("usd_per_hour") or 0.0)
+            lines: list[str] = []
+            failed: list[str] = []
+            got: list[str] = []
+            t0 = time.monotonic()
+            for arm in pair["arms"]:
+                params = (pair.get("params") or {}).get(arm) or {}
+                t_arm = time.monotonic()
+                v = _run_arm(template, arm, seed, params, metric, cwd, timeout)
+                dt = time.monotonic() - t_arm
+                if v is None:
+                    failed.append(arm)
+                    got.append(f"{arm} failed")
+                    continue
+                safe = {k: x for k, x in params.items()
+                        if k not in _RESERVED and "=" not in str(x)}
+                lines.append(result_line(arm, metric, v, seed=seed, **safe))
+                if metric not in ("wall_s", "usd"):         # the run's cost, as run-seeds does
+                    lines.append(result_line(arm, "wall_s", round(dt, 3), seed=seed, **safe))
+                    if rate > 0:
+                        lines.append(result_line(arm, "usd", round(dt / 3600 * rate, 9),
+                                                 seed=seed, **safe))
+                got.append(f"{arm} {metric}={v:g}")
+            wall = time.monotonic() - t0
+            if log:
+                log(f"seed {seed}: {', '.join(got)} ({wall:.1f} s)")
+            out = self.work(study_id, worker=name, seed=seed, results=lines, failed=failed,
+                            wall_s=wall, lease_s=lease_s)
+
     def wait_study(self, study_id: str, timeout: float = 24 * 3600,
                    poll_s: float = 30.0) -> dict[str, Any]:
         """Poll until the study stops running and return it. Raises TimeoutError after
@@ -228,6 +330,57 @@ class RunLab:
             if time.monotonic() + poll_s > deadline:
                 raise TimeoutError(f"study {study_id} still running after {timeout:.0f}s")
             time.sleep(poll_s)
+
+
+_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,99}\Z")
+_KEY = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,63}\Z")
+_VALUE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:+=-]{0,99}\Z")
+_HOLE = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)\}")
+_RESERVED = ("experiment", "metric", "value", "reported")   # not params of a RESULT line
+_NUM = r"[-+]?(?:(?i:nan|inf(?:inity)?)(?!\w)|(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)"
+
+
+def _worker_name() -> str:
+    host = re.sub(r"[^A-Za-z0-9_.:-]", "-", socket.gethostname())[:40].lstrip("-_.:")
+    return f"{host or 'worker'}-{os.getpid()}"
+
+
+def fill(template: list[str], arm: str, seed: int, params: dict[str, Any]) -> list[str]:
+    """`template` (a command split into words) with `{arm}`, `{seed}` and each param's
+    `{name}` replaced inside every word; no shell ever parses the result. Names and values
+    are checked first (letters, digits and `_.:+=-`, starting with a letter or digit), so
+    none can start a flag or hold a space."""
+    values = {"arm": arm, "seed": str(int(seed))}
+    if not _NAME.match(arm):
+        raise ValueError(f"bad arm name {arm[:40]!r}")
+    for k, v in params.items():
+        if not _KEY.match(str(k)) or not _VALUE.match(str(v)) or k in values:
+            raise ValueError(f"bad param {str(k)[:40]}={str(v)[:40]!r}")
+        values[str(k)] = str(v)
+    missing = sorted({m for w in template for m in _HOLE.findall(w)} - set(values))
+    if missing:
+        raise ValueError(f"cmd needs {', '.join(missing)}: give them as params "
+                         "(--param NAME=VALUE)")
+    return [_HOLE.sub(lambda m: values[m.group(1)], w) for w in template]
+
+
+def last_value(text: str, metric: str) -> float | None:
+    """The last `<metric>=<value>` (or `<metric>: <value>`) in `text`; None if none."""
+    hits = re.findall(rf"\b{re.escape(metric)}\s*[=:]\s*({_NUM})", text)
+    return float(hits[-1]) if hits else None
+
+
+def _run_arm(template: list[str], arm: str, seed: int, params: dict[str, Any], metric: str,
+             cwd: str | None, timeout: float | None) -> float | None:
+    argv = fill(template, arm, seed, params)
+    try:
+        p = subprocess.run(argv, cwd=cwd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                           text=True, timeout=timeout, check=False)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if p.returncode != 0:
+        return None
+    return last_value(p.stdout or "", metric)
 
 
 def result_line(experiment: str, metric: str, value: float, *, seed: int | None = None,
@@ -244,3 +397,83 @@ def result_line(experiment: str, metric: str, value: float, *, seed: int | None 
     extra = "".join(f" {k}={v}" for k, v in params.items())
     return (f"RESULT: {experiment} {metric}={float(value)!r}"
             + ("" if seed is None else f" seed={int(seed)}") + extra)
+
+
+# ---------------------------------------------------------------- command line
+
+def main(argv: list[str] | None = None) -> int:
+    """`runlab worker ...`: run a study's seed pairs on this machine (see the module doc)."""
+    import argparse
+
+    ap = argparse.ArgumentParser(prog="runlab", description="RunLab from the command line.")
+    sub = ap.add_subparsers(dest="command", required=True)
+    w = sub.add_parser("worker", help="run a study's seed pairs on this machine",
+                       description="Run seed pairs of a planned comparison here and post the "
+                       "numbers to RunLab until its sequential test decides, n_max seeds ran "
+                       "or the next pair would pass --max-usd.")
+    w.add_argument("--url", help="your RunLab URL (default: env RUNLAB_URL)")
+    w.add_argument("--token", help="your API token (default: env RUNLAB_TOKEN)")
+    w.add_argument("--cmd", required=True, help='the training command, with {arm}, {seed} and '
+                   'param names as placeholders, e.g. "python train.py --arm {arm} --seed '
+                   '{seed}"; it prints <metric>=<value>')
+    w.add_argument("--study", help="work on this study (st_...) instead of starting one")
+    w.add_argument("--project")
+    w.add_argument("--a", help="the treatment arm")
+    w.add_argument("--b", help="the baseline arm")
+    w.add_argument("--metric", help="the planned metric")
+    w.add_argument("--max-usd", type=float, help="the study's dollar cap")
+    w.add_argument("--usd-per-hour", type=float, help="what an hour of this machine costs")
+    w.add_argument("--param", action="append", default=[], metavar="NAME=VALUE",
+                   help="a placeholder's value for both arms (repeatable)")
+    w.add_argument("--arm-param", action="append", default=[], metavar="ARM:NAME=VALUE",
+                   help="a placeholder's value for one arm (repeatable)")
+    w.add_argument("--worker", help="this worker's name; the same name resumes its pair")
+    w.add_argument("--lease-s", type=float, help="seconds a pair stays reserved for this "
+                   "worker (default 3600); set it above one pair's run time")
+    w.add_argument("--timeout", type=float, help="seconds per run; a longer run counts as "
+                   "failed")
+    w.add_argument("--cwd", help="where the command runs (default: here)")
+    args = ap.parse_args(argv)
+    try:
+        rl = RunLab(args.url, args.token)
+        sid = args.study
+        if not sid:
+            need = [f"--{k.replace('_', '-')}" for k in ("project", "a", "b", "metric",
+                                                         "max_usd", "usd_per_hour")
+                    if getattr(args, k) is None]
+            if need:
+                ap.error(f"give --study, or {' '.join(need)} to start one")
+            bad = [x for x in args.param if "=" not in x] + [
+                x for x in args.arm_param if ":" not in x or "=" not in x.partition(":")[2]]
+            if bad:
+                ap.error(f"give --param NAME=VALUE and --arm-param ARM:NAME=VALUE, not {bad[0]!r}")
+            params = dict(kv.split("=", 1) for kv in args.param)
+            per: dict[str, dict[str, str]] = {}
+            for x in args.arm_param:
+                arm, _, kv = x.partition(":")
+                k, _, v = kv.partition("=")
+                per.setdefault(arm, {})[k] = v
+            st = rl.start_worker_study(args.project, args.a, args.b, args.metric,
+                                       args.max_usd, args.usd_per_hour, params=params,
+                                       arm_params=per)
+            sid = st["id"]
+            print(f"study {sid}: {args.a} vs {args.b} on {args.metric}, up to "
+                  f"{st.get('n_max')} seed pairs, cap ${args.max_usd:g}", file=sys.stderr)
+        end = rl.run_worker(sid, args.cmd, worker=args.worker, cwd=args.cwd,
+                            timeout=args.timeout, lease_s=args.lease_s,
+                            log=lambda line: print(line, file=sys.stderr))
+    except RunLabError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    win = f", winner {end['winner']}" if end.get("winner") else ""
+    print(f"study {sid}: {end.get('state')} ({end.get('decision')}{win}) after "
+          f"{end.get('pairs')} pairs, ${float(end.get('usd') or 0):.4f}")
+    print(json.dumps(end, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

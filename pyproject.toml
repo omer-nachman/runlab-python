@@ -12,6 +12,9 @@ license = "MIT"
 authors = [{ name = "omer-nachman" }]
 dependencies = []
 
+[project.scripts]
+runlab = "runlab_client:main"
+
 [project.urls]
 Homepage = "https://github.com/omer-nachman/runlab-python"
 
