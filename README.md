@@ -4,8 +4,13 @@
 ![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](https://github.com/omer-nachman/runlab-python/blob/main/LICENSE)
 
-**Did my change actually help?** You record each seed's metric for two arms: your change and
-its baseline. RunLab gives back a verdict you can quote, built from:
+**Did my change actually help?** RunLab answers that for ML researchers and engineers, and for
+the coding agents working with them: a new augmentation, loss or learning rate against its
+baseline, across random seeds.
+
+Your training stays where it runs today. You record each seed's metric for both arms, your
+change and its baseline, from Python, the `runlab` command or plain HTTP. RunLab, hosted at
+[runlab.tools](https://runlab.tools), gives back a verdict you can quote, built from:
 
 - a pre-registered plan;
 - a paired test across seeds, with a 95 % confidence interval;
@@ -23,8 +28,8 @@ pip install runlab-client       # Python 3.10+, no dependencies
 runlab demo                     # sign in with GitHub, then a first verdict on simulated numbers
 ```
 
-The first time, a browser opens: sign in with GitHub and approve the code your terminal shows.
-Then the demo plans, records 10 seeds per arm, compares and reports, in seconds:
+The first time, a browser opens to sign in with GitHub. Then the demo plans, records 10 seeds
+per arm, compares and reports, in seconds:
 
 ```text
 treatment vs baseline on acc (higher is better): treatment is better
@@ -35,7 +40,7 @@ The verdict page: https://runlab.tools/v/...
 ```
 
 Next, your own runs: the [Quickstart](#quickstart) below, with your training run in place of
-the simulated one. Questions about signing in: [Signing in](#signing-in).
+the simulated one.
 
 ## Quickstart
 
@@ -190,19 +195,6 @@ runlab worker --project resnet-aug --a mixup --b baseline --metric acc \
 - Each run's time is recorded next to its metric, as `wall_s` and `usd` of its arm and seed.
 - From Python: `s = rl.start_worker_study(...)`, then `rl.run_worker(s["id"], cmd)`.
 
-## Signing in
-
-`runlab login` signs a machine in; `runlab demo` does it too on first use.
-
-| Question | Answer |
-|---|---|
-| Another program called `runlab` first on your PATH? | Run `runlab-client <command>` or `python -m runlab_client <command>` instead. |
-| No browser here (SSH, a headless GPU box)? | Open the printed link on any device: your laptop or phone. |
-| What do I approve? | The page asks "Authorize this terminal?" and shows the code, address and host name that asked. Approve only if the code matches your terminal's. |
-| Where is the key? | `~/.config/runlab/token` (`$XDG_CONFIG_HOME` respected; folder `0700`, file `0600`): a personal API key named `cli <host> <date>`, valid until `runlab logout` revokes it and deletes the file. `runlab whoami` shows who it signs in as. |
-| What does `RunLab()` use? | Token: `token=` argument, env `RUNLAB_TOKEN`, the saved key. URL: `url=` argument, env `RUNLAB_URL`, the URL you logged in to, `https://runlab.tools`. The saved key is only sent to the URL that issued it. |
-| CI or other non-interactive jobs? | Set `RUNLAB_TOKEN` (and `RUNLAB_URL`) instead of logging in. |
-
 ## Errors
 
 Every failure raises `RunLabError` with:
@@ -227,7 +219,7 @@ The client retries GET requests 3 times with exponential backoff, on connection 
 `RunLab(url=None, token=None, *, timeout=30, retries=3, backoff_s=0.5)`. Every method returns
 the decoded JSON of one operation in
 [openapi.json](https://github.com/omer-nachman/runlab-python/blob/main/openapi.json).
-With no arguments it uses the key `runlab login` saved (see [Signing in](#signing-in)).
+With no arguments it uses your sign-in; in CI, set `RUNLAB_TOKEN` instead.
 
 | Method | Operation | Returns |
 |---|---|---|
@@ -251,13 +243,11 @@ With no arguments it uses the key `runlab login` saved (see [Signing in](#signin
 | Command | What it does |
 |---|---|
 | `runlab demo [--project P] [--url URL] [--no-browser]` | Sign in if needed, then plan, record 10 simulated seeds per arm, compare and report, in project `runlab-demo`. |
-| `runlab login [--url URL] [--no-browser]` | Sign this machine in with GitHub and save a personal key. |
-| `runlab whoami [--url URL]` | Who the key signs in as, and where. Exit 1 when not logged in. |
-| `runlab logout` | Revoke the saved key and delete it. If RunLab cannot be reached, the key stays saved and the exit code is 1. |
+| `runlab login [--url URL] [--no-browser]` | Sign in with GitHub. |
+| `runlab whoami [--url URL]` | Who you are signed in as. |
+| `runlab logout` | Sign out. |
 | `runlab worker ...` | Run a study's seed pairs here (see above). |
 | `runlab --version` | The client's version. |
-
-Each command also runs as `runlab-client ...` and `python -m runlab_client ...`.
 
 ## Coding agents
 

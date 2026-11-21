@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "runlab-client"
-version = "0.3.0"
-description = "Python client for the RunLab research API: pre-registered A/B comparisons over seeds, verdicts with confidence intervals. Standard library only."
+version = "0.3.1"
+description = "Did my change actually help? Verdicts over seeds with confidence intervals, for ML researchers, engineers and their coding agents. Python client and CLI for RunLab; standard library only."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"

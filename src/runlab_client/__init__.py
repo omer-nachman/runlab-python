@@ -3,7 +3,6 @@
     $ pip install runlab-client
     $ runlab demo                     # GitHub sign-in, then a first verdict on simulated numbers
     $ runlab login                    # sign in only; the key stays on this machine
-    $ runlab-client login             # the same, when another `runlab` comes first on PATH
 
     from runlab_client import RunLab
 
@@ -53,7 +52,7 @@ from pathlib import Path
 from typing import Any
 
 __all__ = ["RunLab", "RunLabError", "login", "result_line"]
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 
 DEFAULT_URL = "https://runlab.tools"
 

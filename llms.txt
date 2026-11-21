@@ -1,16 +1,17 @@
 # runlab-client
 
-> Python client and HTTP spec for the RunLab research API: pre-register an A-vs-B
-> comparison, record each seed's metric, and get a verdict. The verdict comes from a paired
-> test with a 95 % confidence interval, checked against the plan. It refuses a misleading
-> comparison and says which wins a write-up may quote. The client uses only the standard
-> library. Get started: `pip install runlab-client`, then `runlab demo` (sign in with GitHub,
-> then a first verdict on simulated numbers) or `runlab login`;
-> `RunLab()` then needs no settings (in CI: env RUNLAB_TOKEN, RUNLAB_URL).
+> Python client and HTTP spec for the RunLab research API, for ML researchers, engineers and
+> their coding agents: did a change actually help? Pre-register an A-vs-B comparison, record
+> each seed's metric, and get a verdict. The verdict comes from a paired test with a 95 %
+> confidence interval, checked against the plan. It refuses a misleading comparison and says
+> which wins a write-up may quote. The client uses only the standard library. Get started:
+> `pip install runlab-client`, then `runlab demo` (sign in with GitHub, then a first verdict
+> on simulated numbers) or `runlab login`; `RunLab()` then needs no settings (in CI: env
+> RUNLAB_TOKEN, RUNLAB_URL).
 
 ## Docs
 
-- [README](https://github.com/omer-nachman/runlab-python/blob/main/README.md): get started (`runlab demo`), signing in (`runlab login`, `whoami`, `logout`), quickstart, the loop, verdict codes, studies (also `runlab worker`: seeds on your machine), errors, client reference
+- [README](https://github.com/omer-nachman/runlab-python/blob/main/README.md): get started (`runlab demo`), quickstart, the loop, verdict codes, studies (also `runlab worker`: seeds on your machine), errors, client reference
 - [AGENTS.md](https://github.com/omer-nachman/runlab-python/blob/main/AGENTS.md): how a coding agent should run the loop and report the result
 - [OpenAPI 3.1 spec](https://github.com/omer-nachman/runlab-python/blob/main/openapi.json): 11 operations under /api/v1, bearer-token auth
 
