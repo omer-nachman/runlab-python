@@ -1,5 +1,9 @@
 # runlab-client
 
+[![PyPI](https://img.shields.io/pypi/v/runlab-client)](https://pypi.org/project/runlab-client/)
+![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](https://github.com/omer-nachman/runlab-python/blob/main/LICENSE)
+
 **Did my change actually help?** You record each seed's metric for two arms: your change and
 its baseline. RunLab gives back a verdict you can quote, built from:
 
@@ -14,6 +18,7 @@ on Python 3.10+.
 
 - [API reference](https://omer-nachman.github.io/runlab-python/api.html)
 - [Examples](https://github.com/omer-nachman/runlab-python/tree/main/examples): Python and curl
+- [Release history](https://pypi.org/project/runlab-client/#history)
 
 ## Get started
 
@@ -276,6 +281,10 @@ Each command also runs as `runlab-client ...` and `python -m runlab_client ...`.
 [AGENTS.md](https://github.com/omer-nachman/runlab-python/blob/main/AGENTS.md)
 is the short version for Claude Code, Codex and other agents.
 [llms.txt](https://github.com/omer-nachman/runlab-python/blob/main/llms.txt) indexes this repo for LLM tools.
+
+## Support
+
+Questions and bug reports: [GitHub Issues](https://github.com/omer-nachman/runlab-python/issues).
 
 ## License
 

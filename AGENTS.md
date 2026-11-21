@@ -56,7 +56,7 @@ interval, checked against a plan registered before the seeds ran.
 
 ## Reference
 
-- [README.md](README.md): every method, verdict, field and error.
-- [openapi.json](openapi.json): the HTTP contract (10 operations under `/api/v1`).
-- [examples/quickstart.py](examples/quickstart.py): the full loop in Python.
-- [examples/curl.sh](examples/curl.sh): the loop over HTTP.
+- [README.md](https://github.com/omer-nachman/runlab-python/blob/main/README.md): every method, verdict, field and error.
+- [openapi.json](https://github.com/omer-nachman/runlab-python/blob/main/openapi.json): the HTTP contract (11 operations under `/api/v1`).
+- [examples/quickstart.py](https://github.com/omer-nachman/runlab-python/blob/main/examples/quickstart.py): the full loop in Python.
+- [examples/curl.sh](https://github.com/omer-nachman/runlab-python/blob/main/examples/curl.sh): the loop over HTTP.

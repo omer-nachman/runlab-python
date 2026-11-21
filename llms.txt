@@ -9,15 +9,15 @@
 
 ## Docs
 
-- [README](README.md): get started (`runlab login`, `whoami`, `logout`), quickstart, the loop, verdict codes, studies (also `runlab worker`: seeds on your machine), errors, client reference
-- [AGENTS.md](AGENTS.md): how a coding agent should run the loop and report the result
-- [OpenAPI 3.1 spec](openapi.json): 10 operations under /api/v1, bearer-token auth
+- [README](https://github.com/omer-nachman/runlab-python/blob/main/README.md): get started (`runlab login`, `whoami`, `logout`), quickstart, the loop, verdict codes, studies (also `runlab worker`: seeds on your machine), errors, client reference
+- [AGENTS.md](https://github.com/omer-nachman/runlab-python/blob/main/AGENTS.md): how a coding agent should run the loop and report the result
+- [OpenAPI 3.1 spec](https://github.com/omer-nachman/runlab-python/blob/main/openapi.json): 11 operations under /api/v1, bearer-token auth
 
 ## Examples
 
-- [quickstart.py](examples/quickstart.py): plan, 10 seeds per arm, compare
-- [curl.sh](examples/curl.sh): the same loop with curl
+- [quickstart.py](https://github.com/omer-nachman/runlab-python/blob/main/examples/quickstart.py): plan, 10 seeds per arm, compare
+- [curl.sh](https://github.com/omer-nachman/runlab-python/blob/main/examples/curl.sh): the same loop with curl
 
 ## Optional
 
-- [Client source](src/runlab_client/__init__.py): one file, about 670 lines
+- [Client source](https://github.com/omer-nachman/runlab-python/blob/main/src/runlab_client/__init__.py): one file, about 700 lines
