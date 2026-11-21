@@ -2,6 +2,7 @@
 
     $ pip install runlab-client
     $ runlab login                    # sign in with GitHub; the key stays on this machine
+    $ runlab-client login             # the same, when another `runlab` comes first on PATH
 
     from runlab_client import RunLab
 
@@ -50,7 +51,7 @@ from pathlib import Path
 from typing import Any
 
 __all__ = ["RunLab", "RunLabError", "login", "result_line"]
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 DEFAULT_URL = "https://runlab.tools"
 
@@ -580,12 +581,12 @@ def _cmd_login(args: Any) -> int:
 def _cmd_whoami(args: Any) -> int:
     rl = RunLab(args.url)
     if not rl.token:
-        print(f"not logged in to {rl.url}: run `runlab login`", file=sys.stderr)
+        print(f"not logged in to {rl.url}: run `{args.prog} login`", file=sys.stderr)
         return 1
     try:
         me = rl.me()
     except RunLabError as exc:
-        hint = ": run `runlab login`" if exc.status == 401 else ""
+        hint = f": run `{args.prog} login`" if exc.status == 401 else ""
         print(f"error: {exc}{hint}", file=sys.stderr)
         return 1
     print(f"{me.get('name')} ({me.get('role')}) at {rl.url}")
@@ -603,7 +604,7 @@ def _cmd_logout(args: Any) -> int:
     except RunLabError as exc:
         if exc.status != 401:
             print(f"error: cannot revoke the key at {url}: {exc.message}. It stays saved: run "
-                  f"`runlab logout` again, or delete {config_dir() / 'token'} to forget it "
+                  f"`{args.prog} logout` again, or delete {config_dir() / 'token'} to forget it "
                   "here only", file=sys.stderr)
             return 1
         how = "the key had already stopped working"
@@ -616,11 +617,18 @@ def _cmd_logout(args: Any) -> int:
 
 # ---------------------------------------------------------------- command line
 
-def main(argv: list[str] | None = None) -> int:
-    """`runlab login | whoami | logout | worker ...` (see the module doc)."""
+def main(argv: list[str] | None = None, prog: str | None = None) -> int:
+    """`runlab login | whoami | logout | worker ...` (see the module doc); also installed as
+    `runlab-client`, and run by `python -m runlab_client`. Every hint names `prog`, the
+    command that was run (default: `runlab-client` when run under that name, else `runlab`),
+    so following it reaches this client and not another `runlab` on PATH."""
     import argparse
 
-    ap = argparse.ArgumentParser(prog="runlab", description="RunLab from the command line.")
+    if prog is None:
+        prog = "runlab-client" if Path(sys.argv[0]).name.startswith("runlab-client") else "runlab"
+    ap = argparse.ArgumentParser(prog=prog, description="RunLab from the command line.")
+    ap.add_argument("--version", action="version", version=f"runlab-client {__version__}")
+    ap.set_defaults(prog=prog)
     sub = ap.add_subparsers(dest="command", required=True)
     lg = sub.add_parser("login", help="sign this machine in with GitHub",
                         description="Print a link and a code, open the link when this machine "

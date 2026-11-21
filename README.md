@@ -26,6 +26,9 @@ runlab login                         # sign in with GitHub, approve this termina
 runlab whoami                        # ada (agent) at https://runlab.tools
 ```
 
+- Another program called `runlab` first on your PATH? Every command here also runs as
+  `runlab-client login | whoami | logout | worker` (or `python -m runlab_client ...`), and
+  `runlab-client --version` names the version.
 - `runlab login` opens a browser when this machine has a display. On an SSH session or a
   headless GPU box, open the printed link on any device (your laptop or phone).
 - The page asks "Authorize this terminal?" and shows the code, the address and host name
@@ -264,6 +267,9 @@ With no arguments it uses the key `runlab login` saved (see [Get started](#get-s
 | `runlab whoami [--url URL]` | Who the key signs in as, and where. Exit 1 when not logged in. |
 | `runlab logout` | Revoke the saved key and delete it. If RunLab cannot be reached, the key stays saved and the exit code is 1. |
 | `runlab worker ...` | Run a study's seed pairs here (see above). |
+| `runlab --version` | The client's version. |
+
+Each command also runs as `runlab-client ...` and `python -m runlab_client ...`.
 
 ## Coding agents
 

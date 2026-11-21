@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "runlab-client"
-version = "0.2.0"
+version = "0.2.1"
 description = "Python client for the RunLab research API: pre-registered A/B comparisons over seeds, verdicts with confidence intervals. Standard library only."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -14,6 +14,8 @@ dependencies = []
 
 [project.scripts]
 runlab = "runlab_client:main"
+# the same commands under a name no other `runlab` program on PATH takes
+runlab-client = "runlab_client:main"
 
 [project.urls]
 Homepage = "https://github.com/omer-nachman/runlab-python"

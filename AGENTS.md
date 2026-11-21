@@ -6,7 +6,8 @@ interval, checked against a plan registered before the seeds ran.
 
 ## Setup
 
-- `pip install runlab-client` (Python 3.10+, no dependencies).
+- `pip install runlab-client` (Python 3.10+, no dependencies). It installs the commands
+  `runlab` and `runlab-client` (the same; use the second when another `runlab` is on PATH).
 - Access: the user runs `runlab login` once (it needs them to sign in with GitHub in a
   browser and approve, so ask them to run it; never approve for them). After that,
   `RunLab()` finds the saved key with no settings; `runlab whoami` shows who it signs in as.
