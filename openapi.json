@@ -305,18 +305,26 @@
                   },
                   "a": {
                     "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S",
                     "description": "The treatment arm: the experiment name of your change."
                   },
                   "b": {
                     "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S",
                     "description": "The baseline arm."
                   },
                   "metric": {
                     "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S",
                     "description": "The primary metric, e.g. `acc` or `val_loss`."
                   },
                   "hypothesis": {
                     "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S",
                     "description": "What you expect, in words."
                   },
                   "n_max": {
@@ -474,6 +482,8 @@
                   },
                   "results": {
                     "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S",
                     "description": "The lines, newline-separated."
                   }
                 },
@@ -704,14 +714,20 @@
                   },
                   "a": {
                     "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S",
                     "description": "The treatment arm."
                   },
                   "b": {
                     "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S",
                     "description": "The baseline arm."
                   },
                   "metric": {
                     "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S",
                     "description": "The metric to test."
                   },
                   "better": {
@@ -776,7 +792,9 @@
             "description": "At most this many (1-500).",
             "schema": {
               "type": "integer",
-              "default": 50
+              "default": 50,
+              "minimum": 1,
+              "maximum": 500
             }
           },
           {
@@ -1194,7 +1212,9 @@
             "description": "False discovery rate (default 0.05).",
             "schema": {
               "type": "number",
-              "default": 0.05
+              "default": 0.05,
+              "exclusiveMinimum": 0,
+              "exclusiveMaximum": 1
             }
           }
         ],
@@ -1482,7 +1502,9 @@
             "description": "At most this many (1-500).",
             "schema": {
               "type": "integer",
-              "default": 50
+              "default": 50,
+              "minimum": 1,
+              "maximum": 500
             }
           }
         ],
