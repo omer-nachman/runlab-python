@@ -1,8 +1,11 @@
 """runlab-client: Python client for the RunLab research API.
 
+    $ pip install runlab-client
+    $ runlab login                    # sign in with GitHub; the key stays on this machine
+
     from runlab_client import RunLab
 
-    rl = RunLab()                     # reads RUNLAB_URL and RUNLAB_TOKEN
+    rl = RunLab()                     # after `runlab login`, or with RUNLAB_URL / RUNLAB_TOKEN
     rl.plan("demo", "treatment", "baseline", "acc", hypothesis="the change helps", n_max=10,
             stopping="fixed")
     rl.result("demo", "treatment", acc=0.91, seed=0)
@@ -16,6 +19,11 @@ seed pair RunLab hands out and posts the numbers back, until the plan's sequenti
 
     runlab worker --project demo --a treatment --b baseline --metric acc --max-usd 5 \
         --usd-per-hour 0.8 --cmd "python train.py --arm {arm} --seed {seed}"
+
+`runlab login` prints a link and a code (and opens a browser when this machine has a display);
+sign in with GitHub there, on any device, and approve. The key is saved to
+~/.config/runlab/token ($XDG_CONFIG_HOME respected), readable by you alone; `runlab whoami`
+shows who it signs in as and `runlab logout` revokes it.
 
 Standard library only, Python 3.10+. Each method is one operation of openapi.json.
 Errors raise RunLabError with the HTTP status, RunLab's message and the request id.
@@ -37,10 +45,14 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
+import webbrowser
+from pathlib import Path
 from typing import Any
 
-__all__ = ["RunLab", "RunLabError", "result_line"]
-__version__ = "0.1.0"
+__all__ = ["RunLab", "RunLabError", "login", "result_line"]
+__version__ = "0.2.0"
+
+DEFAULT_URL = "https://runlab.tools"
 
 RETRY_STATUS = (429, 502, 503, 504)
 
@@ -82,22 +94,20 @@ class RunLabError(RuntimeError):
 class RunLab:
     """A connection to RunLab.
 
-    url: your RunLab URL, e.g. "https://runlab.example.com" (default: env RUNLAB_URL).
-    token: your API token (default: env RUNLAB_TOKEN).
+    url: your RunLab URL (default: env RUNLAB_URL, else the one `runlab login` signed in to,
+        else https://runlab.tools).
+    token: your API token (default: env RUNLAB_TOKEN, else the key `runlab login` saved, which
+        is only ever sent to the URL it was issued by).
     """
 
     def __init__(self, url: str | None = None, token: str | None = None, *,
                  timeout: float = 30.0, retries: int = 3, backoff_s: float = 0.5) -> None:
-        url = url or os.environ.get("RUNLAB_URL", "")
-        if not url:
-            raise ValueError("no RunLab URL: pass url= or set RUNLAB_URL")
-        self.url = url.rstrip("/")
-        parts = urllib.parse.urlsplit(self.url)
-        if parts.scheme not in ("http", "https") or not parts.hostname:
-            raise ValueError("url must be http:// or https://<host>")
-        if parts.username or parts.password:
-            raise ValueError("pass the token as token=, not inside the url")
-        self.token = token if token is not None else os.environ.get("RUNLAB_TOKEN", "")
+        saved_url, saved = saved_login()
+        self.url = _checked(url or os.environ.get("RUNLAB_URL") or saved_url or DEFAULT_URL)
+        if token is None:
+            token = os.environ.get("RUNLAB_TOKEN") or (
+                saved if saved and _same(self.url, saved_url) else "")
+        self.token = token
         self.timeout = timeout
         self.retries = retries
         self.backoff_s = backoff_s
@@ -399,20 +409,237 @@ def result_line(experiment: str, metric: str, value: float, *, seed: int | None 
             + ("" if seed is None else f" seed={int(seed)}") + extra)
 
 
+# ------------------------------------------------------------- runlab login
+
+def config_dir() -> Path:
+    """Where `runlab login` keeps its key: $XDG_CONFIG_HOME/runlab, else ~/.config/runlab
+    (a relative XDG_CONFIG_HOME is ignored, as the XDG spec says)."""
+    xdg = os.environ.get("XDG_CONFIG_HOME") or ""
+    return (Path(xdg) if os.path.isabs(xdg) else Path.home() / ".config") / "runlab"
+
+
+def saved_login() -> tuple[str, str]:
+    """(url, key) that `runlab login` saved here, or ("", "")."""
+    d = config_dir()
+    try:
+        token = (d / "token").read_text(encoding="utf-8").strip()
+    except OSError:
+        return "", ""
+    try:
+        url = (d / "url").read_text(encoding="utf-8").strip()
+    except OSError:
+        url = ""
+    return _base(url or DEFAULT_URL), token
+
+
+def _write_private(path: Path, text: str) -> None:
+    """`text` into `path`, readable by you alone: the file is created 0600 (never briefly
+    wider, whatever the umask) in a 0700 directory, then swapped in whole."""
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    os.chmod(path.parent, 0o700)
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    try:
+        tmp.unlink()
+    except FileNotFoundError:
+        pass
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text + "\n")
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, path)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+
+
+def save_login(url: str, token: str) -> Path:
+    """Save `token` for `url`; returns the token file's path. The old key goes first, so a
+    key is never paired with another URL, even after a crash halfway."""
+    d = config_dir()
+    (d / "token").unlink(missing_ok=True)
+    _write_private(d / "url", _base(url))
+    _write_private(d / "token", token)
+    return d / "token"
+
+
+def forget_login() -> bool:
+    """Delete the saved key and URL; whether there was a key."""
+    d = config_dir()
+    had = (d / "token").exists()
+    for name in ("token", "url"):
+        (d / name).unlink(missing_ok=True)
+    return had
+
+
+def _base(url: str) -> str:
+    return url.strip().rstrip("/")
+
+
+def _checked(url: str) -> str:
+    """`url` without its trailing slash, if it is http(s)://<host> with no credentials in it."""
+    base = _base(url)
+    parts = urllib.parse.urlsplit(base)
+    if parts.scheme not in ("http", "https") or not parts.hostname:
+        raise ValueError("url must be http:// or https://<host>")
+    if parts.username or parts.password:
+        raise ValueError("pass the token as token=, not inside the url")
+    return base
+
+
+def _same(a: str, b: str) -> bool:
+    return _base(a).lower() == _base(b).lower()
+
+
+def _post_json(url: str, body: dict[str, Any], timeout: float) -> tuple[int, dict[str, Any]]:
+    """POST JSON; (status, decoded body). Status 0 when RunLab cannot be reached."""
+    req = urllib.request.Request(url, json.dumps(body).encode("utf-8"), {
+        "Content-Type": "application/json", "Accept": "application/json",
+        "User-Agent": f"runlab-client/{__version__}"}, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:  # noqa: S310
+            status, raw = r.status, r.read()
+    except urllib.error.HTTPError as exc:
+        status, raw = exc.code, exc.read()
+    except (urllib.error.URLError, OSError) as exc:
+        return 0, {"error": f"cannot reach {url}: {getattr(exc, 'reason', exc)}"}
+    try:
+        out = json.loads(raw or b"{}")
+    except ValueError:
+        out = {}
+    return status, out if isinstance(out, dict) else {}
+
+
+def _has_display() -> bool:
+    """A browser here would open a window rather than take over this terminal (SSH, a
+    headless GPU box)."""
+    return sys.platform in ("darwin", "win32") or bool(
+        os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
+
+
+def login(url: str | None = None, *, browser: bool = True, host: str | None = None,
+          show: Any = None, timeout: float = 30.0) -> dict[str, Any]:
+    """Sign this machine in (what `runlab login` runs): print a link and a code, open the
+    link when there is a display, wait while you sign in with GitHub and approve, then save
+    the new key (`save_login`). Returns `user`, `role` and `url`. A denial, an expired code
+    or an unreachable RunLab raises RunLabError and saves nothing. `show` (a callable)
+    receives each line meant for you (default: printed to stderr)."""
+    say = show or (lambda line: print(line, file=sys.stderr))
+    base = _checked(url or os.environ.get("RUNLAB_URL") or saved_login()[0] or DEFAULT_URL)
+    parts = urllib.parse.urlsplit(base)
+    if parts.scheme == "http" and parts.hostname not in ("localhost", "127.0.0.1", "::1"):
+        say(f"warning: {base} is plain http, so the key would travel unencrypted")
+    name = host or socket.gethostname()
+    status, start = _post_json(f"{base}/auth/device/start", {"host": name}, timeout)
+    if status != 200 or not start.get("device_code"):
+        raise RunLabError(status, str(start.get("error") or "cannot start a sign-in"))
+    link = str(start.get("verification_uri_complete") or start.get("verification_uri"))
+    say(f"Sign in to RunLab: open {link}")
+    say(f"and check that the page shows the code {start.get('user_code')} (it works for "
+        f"{int(start.get('expires_in') or 600) // 60} minutes; open it on any device).")
+    if browser and _has_display():
+        try:
+            webbrowser.open(link)
+        except Exception as exc:  # noqa: BLE001 - the printed link still works
+            say(f"(no browser opened: {exc}; open the link above)")
+    say("Waiting for you to approve in the browser (Ctrl-C to stop)...")
+    interval = float(start.get("interval") or 5)
+    deadline = time.monotonic() + float(start.get("expires_in") or 600)
+    while time.monotonic() < deadline:
+        time.sleep(interval)
+        status, out = _post_json(f"{base}/auth/device/poll",
+                                 {"device_code": start["device_code"]}, timeout)
+        err = out.get("error")
+        if status == 200 and out.get("token"):
+            save_login(base, str(out["token"]))
+            return {"user": out.get("user"), "role": out.get("role"), "url": base}
+        if err == "slow_down":
+            interval = float(out.get("interval") or interval + 5)
+        elif err == "expired_token":
+            raise RunLabError(status, "the code expired: run `runlab login` again")
+        elif err == "access_denied":
+            raise RunLabError(status, "denied in the browser: nothing was saved")
+        elif err != "authorization_pending" and status not in (0, *RETRY_STATUS):
+            raise RunLabError(status, str(err or "the sign-in failed"))
+    raise RunLabError(0, "the code expired: run `runlab login` again")
+
+
+def _cmd_login(args: Any) -> int:
+    try:
+        who = login(args.url, browser=not args.no_browser)
+    except RunLabError as exc:
+        print(f"error: {exc.message}", file=sys.stderr)
+        return 1
+    except KeyboardInterrupt:
+        print("stopped: nothing was saved", file=sys.stderr)
+        return 130
+    print(f"Logged in as {who['user']}")
+    return 0
+
+
+def _cmd_whoami(args: Any) -> int:
+    rl = RunLab(args.url)
+    if not rl.token:
+        print(f"not logged in to {rl.url}: run `runlab login`", file=sys.stderr)
+        return 1
+    try:
+        me = rl.me()
+    except RunLabError as exc:
+        hint = ": run `runlab login`" if exc.status == 401 else ""
+        print(f"error: {exc}{hint}", file=sys.stderr)
+        return 1
+    print(f"{me.get('name')} ({me.get('role')}) at {rl.url}")
+    return 0
+
+
+def _cmd_logout(args: Any) -> int:
+    url, token = saved_login()
+    if not token:
+        print("not logged in on this machine")
+        return 0
+    try:
+        RunLab(url, token, retries=0).request("DELETE", "/me/token")
+        how = "key revoked"
+    except RunLabError as exc:
+        if exc.status != 401:
+            print(f"error: cannot revoke the key at {url}: {exc.message}. It stays saved: run "
+                  f"`runlab logout` again, or delete {config_dir() / 'token'} to forget it "
+                  "here only", file=sys.stderr)
+            return 1
+        how = "the key had already stopped working"
+    forget_login()
+    print(f"Logged out of {url} ({how})")
+    if os.environ.get("RUNLAB_TOKEN"):
+        print("note: RUNLAB_TOKEN is still set in this shell", file=sys.stderr)
+    return 0
+
+
 # ---------------------------------------------------------------- command line
 
 def main(argv: list[str] | None = None) -> int:
-    """`runlab worker ...`: run a study's seed pairs on this machine (see the module doc)."""
+    """`runlab login | whoami | logout | worker ...` (see the module doc)."""
     import argparse
 
     ap = argparse.ArgumentParser(prog="runlab", description="RunLab from the command line.")
     sub = ap.add_subparsers(dest="command", required=True)
+    lg = sub.add_parser("login", help="sign this machine in with GitHub",
+                        description="Print a link and a code, open the link when this machine "
+                        "has a display, and wait while you sign in with GitHub and approve. "
+                        "The key is saved to ~/.config/runlab/token, readable by you alone.")
+    lg.add_argument("--url", help="your RunLab URL (default: env RUNLAB_URL, else the one you "
+                    f"logged in to, else {DEFAULT_URL})")
+    lg.add_argument("--no-browser", action="store_true", help="only print the link")
+    who = sub.add_parser("whoami", help="who this machine is signed in as")
+    who.add_argument("--url", help="your RunLab URL (default: the one you logged in to)")
+    sub.add_parser("logout", help="revoke the saved key and delete it")
     w = sub.add_parser("worker", help="run a study's seed pairs on this machine",
                        description="Run seed pairs of a planned comparison here and post the "
                        "numbers to RunLab until its sequential test decides, n_max seeds ran "
                        "or the next pair would pass --max-usd.")
-    w.add_argument("--url", help="your RunLab URL (default: env RUNLAB_URL)")
-    w.add_argument("--token", help="your API token (default: env RUNLAB_TOKEN)")
+    w.add_argument("--url", help="your RunLab URL (default: env RUNLAB_URL, else the one you "
+                   "logged in to)")
+    w.add_argument("--token", help="your API token (default: env RUNLAB_TOKEN, else the key "
+                   "runlab login saved)")
     w.add_argument("--cmd", required=True, help='the training command, with {arm}, {seed} and '
                    'param names as placeholders, e.g. "python train.py --arm {arm} --seed '
                    '{seed}"; it prints <metric>=<value>')
@@ -434,6 +661,9 @@ def main(argv: list[str] | None = None) -> int:
                    "failed")
     w.add_argument("--cwd", help="where the command runs (default: here)")
     args = ap.parse_args(argv)
+    if args.command != "worker":
+        return {"login": _cmd_login, "whoami": _cmd_whoami, "logout": _cmd_logout}[
+            args.command](args)
     try:
         rl = RunLab(args.url, args.token)
         sid = args.study

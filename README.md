@@ -8,20 +8,37 @@ its baseline. RunLab gives back a verdict you can quote, built from:
 - checks that refuse a comparison that would mislead, e.g. arms tuned with unequal budgets.
 
 This repo has the Python client (standard library only), the
-[OpenAPI spec](openapi.json) ([rendered](api.html)) and examples. Install it and set your
-RunLab URL and API token:
+[OpenAPI spec](openapi.json) ([rendered](api.html)) and examples.
+
+## Get started
 
 ```bash
 pip install runlab-client            # Python 3.10+, no dependencies
-export RUNLAB_URL=https://runlab.example.com RUNLAB_TOKEN=<your token>
+runlab login                         # sign in with GitHub, approve this terminal
+# Sign in to RunLab: open https://runlab.tools/login?code=BCDF-GHJK
+# and check that the page shows the code BCDF-GHJK (it works for 10 minutes; ...)
+# Logged in as ada
+runlab whoami                        # ada (agent) at https://runlab.tools
 ```
+
+- `runlab login` opens a browser when this machine has a display. On an SSH session or a
+  headless GPU box, open the printed link on any device (your laptop or phone).
+- The page asks "Authorize this terminal?" and shows the code, the address and host name
+  that asked. Approve only if the code matches the one in your terminal.
+- The key is saved to `~/.config/runlab/token` (`$XDG_CONFIG_HOME` respected): the folder is
+  `0700`, the file `0600`. It is a personal API key named `cli <host> <date>` that works
+  until you log out. `runlab logout` revokes it and deletes the file.
+- After that, `RunLab()` needs no settings. Its order: `token=` argument, env `RUNLAB_TOKEN`,
+  the saved key; `url=` argument, env `RUNLAB_URL`, the URL you logged in to,
+  `https://runlab.tools`. The saved key is only sent to the URL that issued it.
+- In CI or other non-interactive jobs, set `RUNLAB_TOKEN` (and `RUNLAB_URL`) instead.
 
 ## Quickstart
 
 ```python
 from runlab_client import RunLab
 
-rl = RunLab()                                    # reads RUNLAB_URL and RUNLAB_TOKEN
+rl = RunLab()                                    # after `runlab login` (or RUNLAB_TOKEN)
 rl.me()                                          # {'name': 'ada', 'role': 'agent', ...}
 
 # 1. Pre-register, before any seed runs.
@@ -170,7 +187,7 @@ params' names are filled in (no shell runs it).
 
 ```bash
 pip install runlab-client
-export RUNLAB_URL=... RUNLAB_TOKEN=...
+runlab login
 runlab worker --project resnet-aug --a mixup --b baseline --metric acc \
     --max-usd 5 --usd-per-hour 0.8 --param epochs=10 \
     --cmd "python train.py --arm {arm} --seed {seed} --epochs {epochs}"
@@ -211,7 +228,8 @@ harmless anyway.
 ## Client reference
 
 `RunLab(url=None, token=None, *, timeout=30, retries=3, backoff_s=0.5)`. Every method returns
-the decoded JSON of one operation in [openapi.json](openapi.json).
+the decoded JSON of one operation in [openapi.json](openapi.json). With no arguments it uses
+the key `runlab login` saved (see [Get started](#get-started)).
 
 | Method | Operation | Returns |
 |---|---|---|
@@ -229,6 +247,15 @@ the decoded JSON of one operation in [openapi.json](openapi.json).
 | `work(id, *, seed=None, results=None, failed=None, wall_s=None, worker=None, lease_s=None)` | `workOnStudy` | `study`, `pair` (`seed`, `arms`, `params`) or null, `retry_after_s` |
 | `run_worker(id, cmd, *, worker=None, cwd=None, timeout=None, lease_s=None, log=None)` | `workOnStudy` | the ended study, after running its pairs here |
 | `result_line(arm, metric, value, *, seed=None, **params)` | none | one `RESULT:` line, for `record()` |
+| `login(url=None, *, browser=True, host=None, show=None)` | none | `user`, `role`, `url`, after you approve; saves the key |
+| `saved_login()`, `config_dir()` | none | `(url, key)` saved here, and where it is kept |
+
+| Command | What it does |
+|---|---|
+| `runlab login [--url URL] [--no-browser]` | Sign this machine in with GitHub and save a personal key. |
+| `runlab whoami [--url URL]` | Who the key signs in as, and where. Exit 1 when not logged in. |
+| `runlab logout` | Revoke the saved key and delete it. If RunLab cannot be reached, the key stays saved and the exit code is 1. |
+| `runlab worker ...` | Run a study's seed pairs here (see above). |
 
 ## Coding agents
 

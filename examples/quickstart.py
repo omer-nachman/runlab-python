@@ -1,7 +1,7 @@
 """Did the change help? Plan, record 10 seeds per arm, get the verdict, check it is quotable.
 
     pip install runlab-client
-    export RUNLAB_URL=<your-runlab-url> RUNLAB_TOKEN=<your-token>
+    runlab login                  # or: export RUNLAB_URL=... RUNLAB_TOKEN=...
     python quickstart.py [project]
 
 `train` is a stand-in: replace it with your training run, returning the metric for one seed.
@@ -22,7 +22,7 @@ def train(arm: str, seed: int) -> float:
     return 0.80 + rng.gauss(0, 0.01) + (0.02 if arm == "treatment" else 0.0)
 
 
-rl = RunLab()                                  # reads RUNLAB_URL and RUNLAB_TOKEN
+rl = RunLab()                                  # the key runlab login saved, or RUNLAB_TOKEN
 try:
     # 1. Pre-register before any seed runs: arms, metric, seeds, one fixed-n test at the end.
     #    Re-running this script is fine; a changed plan for the same pair needs amend="<why>".

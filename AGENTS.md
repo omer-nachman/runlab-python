@@ -7,10 +7,13 @@ interval, checked against a plan registered before the seeds ran.
 ## Setup
 
 - `pip install runlab-client` (Python 3.10+, no dependencies).
-- `RUNLAB_URL` and `RUNLAB_TOKEN` must be set; if they are not, ask the user for them.
-  Never print, log or commit the token.
+- Access: the user runs `runlab login` once (it needs them to sign in with GitHub in a
+  browser and approve, so ask them to run it; never approve for them). After that,
+  `RunLab()` finds the saved key with no settings; `runlab whoami` shows who it signs in as.
+  In CI, `RUNLAB_TOKEN` (and `RUNLAB_URL`) are used instead.
+  Never print, log or commit the token or `~/.config/runlab/token`.
 - `RunLab().me()` checks access. It returns `{"name": ..., "role": "agent"}`. A 401 means a
-  bad token; ask the user, don't retry.
+  bad or revoked key; ask the user to run `runlab login` again, don't retry.
 
 ## The loop
 

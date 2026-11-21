@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # The same loop over plain HTTP: plan, record 5 seeds per arm, compare.
-# Needs RUNLAB_URL (e.g. https://runlab.example.com) and RUNLAB_TOKEN; bash, curl.
+# Needs RUNLAB_URL (e.g. https://runlab.tools) and RUNLAB_TOKEN; bash, curl. After
+# `runlab login`: export RUNLAB_URL=https://runlab.tools RUNLAB_TOKEN=$(cat ~/.config/runlab/token)
 set -euo pipefail
 : "${RUNLAB_URL:?set RUNLAB_URL}" "${RUNLAB_TOKEN:?set RUNLAB_TOKEN}"
 

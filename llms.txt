@@ -4,11 +4,12 @@
 > comparison, record each seed's metric, and get a verdict. The verdict comes from a paired
 > test with a 95 % confidence interval, checked against the plan. It refuses a misleading
 > comparison and says which wins a write-up may quote. The client uses only the standard
-> library; you need your RunLab URL and token (env RUNLAB_URL, RUNLAB_TOKEN).
+> library. Get started: `pip install runlab-client`, then `runlab login` (GitHub sign-in);
+> `RunLab()` then needs no settings (in CI: env RUNLAB_TOKEN, RUNLAB_URL).
 
 ## Docs
 
-- [README](README.md): quickstart, the loop, verdict codes, studies (also `runlab worker`: seeds on your machine), errors, client reference
+- [README](README.md): get started (`runlab login`, `whoami`, `logout`), quickstart, the loop, verdict codes, studies (also `runlab worker`: seeds on your machine), errors, client reference
 - [AGENTS.md](AGENTS.md): how a coding agent should run the loop and report the result
 - [OpenAPI 3.1 spec](openapi.json): 10 operations under /api/v1, bearer-token auth
 
@@ -19,4 +20,4 @@
 
 ## Optional
 
-- [Client source](src/runlab_client/__init__.py): one file, about 220 lines
+- [Client source](src/runlab_client/__init__.py): one file, about 670 lines
