@@ -11,48 +11,38 @@ its baseline. RunLab gives back a verdict you can quote, built from:
 - a paired test across seeds, with a 95 % confidence interval;
 - checks that refuse a comparison that would mislead, e.g. arms tuned with unequal budgets.
 
-The RunLab Python client gives access to the RunLab API using only the standard library,
-on Python 3.10+.
-
 ## Documentation
 
 - [API reference](https://omer-nachman.github.io/runlab-python/api.html)
 - [Examples](https://github.com/omer-nachman/runlab-python/tree/main/examples): Python and curl
-- [Release history](https://pypi.org/project/runlab-client/#history)
 
 ## Get started
 
 ```bash
-pip install runlab-client            # Python 3.10+, no dependencies
-runlab login                         # sign in with GitHub, approve this terminal
-# Sign in to RunLab: open https://runlab.tools/login?code=BCDF-GHJK
-# and check that the page shows the code BCDF-GHJK (it works for 10 minutes; ...)
-# Logged in as ada
-runlab whoami                        # ada (agent) at https://runlab.tools
+pip install runlab-client       # Python 3.10+, no dependencies
+runlab demo                     # sign in with GitHub, then a first verdict on simulated numbers
 ```
 
-- Another program called `runlab` first on your PATH? Every command here also runs as
-  `runlab-client login | whoami | logout | worker` (or `python -m runlab_client ...`), and
-  `runlab-client --version` names the version.
-- `runlab login` opens a browser when this machine has a display. On an SSH session or a
-  headless GPU box, open the printed link on any device (your laptop or phone).
-- The page asks "Authorize this terminal?" and shows the code, the address and host name
-  that asked. Approve only if the code matches the one in your terminal.
-- The key is saved to `~/.config/runlab/token` (`$XDG_CONFIG_HOME` respected): the folder is
-  `0700`, the file `0600`. It is a personal API key named `cli <host> <date>` that works
-  until you log out. `runlab logout` revokes it and deletes the file.
-- After that, `RunLab()` needs no settings. Its order: `token=` argument, env `RUNLAB_TOKEN`,
-  the saved key; `url=` argument, env `RUNLAB_URL`, the URL you logged in to,
-  `https://runlab.tools`. The saved key is only sent to the URL that issued it.
-- In CI or other non-interactive jobs, set `RUNLAB_TOKEN` (and `RUNLAB_URL`) instead.
+The first time, a browser opens: sign in with GitHub and approve the code your terminal shows.
+Then the demo plans, records 10 seeds per arm, compares and reports, in seconds:
+
+```text
+treatment vs baseline on acc (higher is better): treatment is better
+  paired_t: diff +0.01868 [95% CI +0.01371, +0.02365], p=1.37e-05, n=10 (A 10, B 10)
+  ...
+quotable: treatment − baseline on acc = +0.01868 (95 % CI [+0.01371, +0.02365]; ...)
+The verdict page: https://runlab.tools/v/...
+```
+
+Next, your own runs: the [Quickstart](#quickstart) below, with your training run in place of
+the simulated one. Questions about signing in: [Signing in](#signing-in).
 
 ## Quickstart
 
 ```python
 from runlab_client import RunLab
 
-rl = RunLab()                                    # after `runlab login` (or RUNLAB_TOKEN)
-rl.me()                                          # {'name': 'ada', 'role': 'agent', ...}
+rl = RunLab()                                    # the key `runlab demo` / `login` saved
 
 # 1. Pre-register, before any seed runs.
 rl.plan("resnet-aug", "mixup", "baseline", "acc",
@@ -76,11 +66,11 @@ for c in rl.report("resnet-aug")["claims"]:
     print(c["status"], c["quote"])                # quotable mixup − baseline on acc = ...
 ```
 
-`train` is your own training run. The numbers above are an illustration. A runnable version
-with a simulated `train` is
-[examples/quickstart.py](https://github.com/omer-nachman/runlab-python/blob/main/examples/quickstart.py),
-and [examples/curl.sh](https://github.com/omer-nachman/runlab-python/blob/main/examples/curl.sh)
-does the same loop over plain HTTP.
+`train` is your training run.
+[examples/quickstart.py](https://github.com/omer-nachman/runlab-python/blob/main/examples/quickstart.py)
+runs as is, with a simulated `train`;
+[examples/curl.sh](https://github.com/omer-nachman/runlab-python/blob/main/examples/curl.sh)
+is the same loop over plain HTTP.
 
 ## The loop
 
@@ -92,20 +82,6 @@ does the same loop over plain HTTP.
 | 4. Quote | `report(project)` | `GET /api/v1/research/report` | Says which verdicts a write-up may quote, after the false-discovery-rate correction across every comparison in the project. |
 | Audit | `verdicts(project)`, `verdict(id)` | `GET /api/v1/research/verdicts`, `GET /api/v1/verdicts/{id}` | Shows every recorded verdict, each seed's values, and whether it still holds on today's results. |
 | Delegate | `start_study(...)`, `wait_study(id)` | `POST /api/v1/research/studies` | Runs the seeds itself under a dollar cap and stops once the evidence decides (see below). |
-
-### Each user sees only their projects
-
-On a RunLab where each user has their own data, a project name is yours alone: your `demo`
-and a colleague's `demo` are two projects, never merged, deduplicated or compared with each
-other. Lists (`verdicts()`, `studies()`, `report("")`) show only your projects. A verdict or
-study id that is not yours answers 404, the same as one that does not exist, and an unknown
-project's closest match is one of yours. Project names may not contain `~`.
-
-`a` is the treatment and `b` the baseline. `diff` is the mean of a − b, so it is positive when
-a scored higher. Whether higher is better comes from the metric name: lower for names
-containing `loss`, `error`, `err`, `perplexity`, `ppl`, `wer`, `cer`, `mse`, `mae`, `rmse`,
-`nll`, `latency`, `fid` or `regret`, higher otherwise. Pass `better="higher"` or
-`better="lower"` to override.
 
 ### Results
 
@@ -123,12 +99,17 @@ prints them (send its log to `record()`) or when you call the HTTP API directly.
   `record()` as is.
 - If one RESULT line is malformed, or there is none, the call stores nothing and fails with
   a 400.
-- Project names are case-insensitive.
+- Project names are case-insensitive and may not contain `~`.
 - Params are optional; keep an arm's params the same on every seed. Each distinct set of
   params counts as one tuned configuration. A compare whose arms differ by more than 1.25x
   in configurations is refused (`refused_by: equal_budget`).
 
 ### Verdicts
+
+`a` is the treatment, `b` the baseline; `diff` is the mean of a − b, so it is positive when a
+scored higher. Lower is better for metric names containing `loss`, `error`, `err`,
+`perplexity`, `ppl`, `wer`, `cer`, `mse`, `mae`, `rmse`, `nll`, `latency`, `fid` or `regret`,
+higher otherwise; `better="higher"` or `better="lower"` overrides.
 
 | `verdict` | Meaning |
 |---|---|
@@ -139,16 +120,9 @@ prints them (send its log to `record()`) or when you call the HTTP API directly.
 | `insufficient` | An arm has fewer than 2 seeds, so there is no test. |
 | `refused` | A check found that any verdict would mislead. `refused_by` names the check and `why` says what to fix. |
 
-Read these fields next to the verdict:
-
-- `prereg.status`:
-  - `ok`;
-  - `deviation`, with `issues`, e.g. compared before `n_max` seeds, or the plan was registered
-    after more than 3 seeds had been seen;
-  - `missing`: no plan;
-  - `tampered`.
-- `warnings`, e.g. `peeking`.
-- `report()`, before you quote anything.
+Next to `verdict`, read `prereg.status`: `ok`; `deviation`, with `issues` (e.g. compared
+before `n_max` seeds, or planned after more than 3 seeds were seen); `missing` (no plan); or
+`tampered`. Then read `warnings`, e.g. `peeking`.
 
 ### What keeps a verdict honest
 
@@ -162,8 +136,7 @@ Read these fields next to the verdict:
 
 ## Studies: let RunLab run the seeds
 
-RunLab can also run the seeds for you.
-It runs both arms one seed pair at a time and stops as soon as an always-valid sequential test
+RunLab runs both arms one seed pair at a time and stops as soon as an always-valid sequential test
 (mSPRT) decides. It also stops at `n_max`, or at your dollar cap, whichever comes first.
 
 ```python
@@ -179,7 +152,6 @@ print(s["state"], s["winner"], s["pairs"], s["usd"])                  # e.g. dec
   placeholders, using values of letters, digits and `_.:+=-` only.
 - Every check runs before anything starts. A refusal raises `RunLabError` with status 400
   and costs nothing, e.g. an unknown command, no msprt plan, or a cap that is too high.
-- A study never spends more than `max_usd`.
 - `state` is one of:
 
   | `state` | Meaning |
@@ -187,8 +159,8 @@ print(s["state"], s["winner"], s["pairs"], s["usd"])                  # e.g. dec
   | `running` | Still running seeds. |
   | `decided` | The sequential test stopped. `decision` is `A` or `B` (`winner` names the arm), or `futile` (no detectable difference at this budget) or `equivalent` (`winner` is null). |
   | `undecided` | `n_max` seeds ran without a decision. |
-  | `budget` | The compute budget was spent before a decision (your own machine: the next pair would pass `max_usd`). |
-  | `killed` | Stopped at the dollar cap. |
+  | `budget` | Stopped undecided: the next pair would have passed `max_usd`. |
+  | `killed` | Still running when the time `max_usd` buys ran out; stopped hard. |
   | `failed` | The command failed or printed no result; see `detail`. |
   | `lost` | Stopped reporting long past its deadline. |
   | `refused` | Refused at the start (that call raised a 400); listed for the record. |
@@ -201,8 +173,6 @@ your dollar cap. Your training command prints `<metric>=<value>`; `{arm}`, `{see
 params' names are filled in (no shell runs it).
 
 ```bash
-pip install runlab-client
-runlab login
 runlab worker --project resnet-aug --a mixup --b baseline --metric acc \
     --max-usd 5 --usd-per-hour 0.8 --param epochs=10 \
     --cmd "python train.py --arm {arm} --seed {seed} --epochs {epochs}"
@@ -220,6 +190,19 @@ runlab worker --project resnet-aug --a mixup --b baseline --metric acc \
 - Each run's time is recorded next to its metric, as `wall_s` and `usd` of its arm and seed.
 - From Python: `s = rl.start_worker_study(...)`, then `rl.run_worker(s["id"], cmd)`.
 
+## Signing in
+
+`runlab login` signs a machine in; `runlab demo` does it too on first use.
+
+| Question | Answer |
+|---|---|
+| Another program called `runlab` first on your PATH? | Run `runlab-client <command>` or `python -m runlab_client <command>` instead. |
+| No browser here (SSH, a headless GPU box)? | Open the printed link on any device: your laptop or phone. |
+| What do I approve? | The page asks "Authorize this terminal?" and shows the code, address and host name that asked. Approve only if the code matches your terminal's. |
+| Where is the key? | `~/.config/runlab/token` (`$XDG_CONFIG_HOME` respected; folder `0700`, file `0600`): a personal API key named `cli <host> <date>`, valid until `runlab logout` revokes it and deletes the file. `runlab whoami` shows who it signs in as. |
+| What does `RunLab()` use? | Token: `token=` argument, env `RUNLAB_TOKEN`, the saved key. URL: `url=` argument, env `RUNLAB_URL`, the URL you logged in to, `https://runlab.tools`. The saved key is only sent to the URL that issued it. |
+| CI or other non-interactive jobs? | Set `RUNLAB_TOKEN` (and `RUNLAB_URL`) instead of logging in. |
+
 ## Errors
 
 Every failure raises `RunLabError` with:
@@ -232,20 +215,19 @@ Every failure raises `RunLabError` with:
 |---|---|
 | 400 | Bad input or a refused action. The message says what to fix; an unknown arm, metric or project names the closest match. |
 | 401 | Missing or wrong token. |
-| 403 | Your role cannot do this: writes need `agent` or above. |
+| 403 | This key may not do this; the message says why. |
 | 404 | No such verdict or study. |
 | 413 | Body over 64 KiB; send results in several calls. |
 
 The client retries GET requests 3 times with exponential backoff, on connection errors and on
-429, 502, 503 and 504. It never retries POST requests. Recording the same result line twice is
-harmless anyway.
+429, 502, 503 and 504. It never retries POST requests.
 
 ## Client reference
 
 `RunLab(url=None, token=None, *, timeout=30, retries=3, backoff_s=0.5)`. Every method returns
 the decoded JSON of one operation in
 [openapi.json](https://github.com/omer-nachman/runlab-python/blob/main/openapi.json).
-With no arguments it uses the key `runlab login` saved (see [Get started](#get-started)).
+With no arguments it uses the key `runlab login` saved (see [Signing in](#signing-in)).
 
 | Method | Operation | Returns |
 |---|---|---|
@@ -268,6 +250,7 @@ With no arguments it uses the key `runlab login` saved (see [Get started](#get-s
 
 | Command | What it does |
 |---|---|
+| `runlab demo [--project P] [--url URL] [--no-browser]` | Sign in if needed, then plan, record 10 simulated seeds per arm, compare and report, in project `runlab-demo`. |
 | `runlab login [--url URL] [--no-browser]` | Sign this machine in with GitHub and save a personal key. |
 | `runlab whoami [--url URL]` | Who the key signs in as, and where. Exit 1 when not logged in. |
 | `runlab logout` | Revoke the saved key and delete it. If RunLab cannot be reached, the key stays saved and the exit code is 1. |

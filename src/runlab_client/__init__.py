@@ -1,12 +1,13 @@
 """runlab-client: Python client for the RunLab research API.
 
     $ pip install runlab-client
-    $ runlab login                    # sign in with GitHub; the key stays on this machine
+    $ runlab demo                     # GitHub sign-in, then a first verdict on simulated numbers
+    $ runlab login                    # sign in only; the key stays on this machine
     $ runlab-client login             # the same, when another `runlab` comes first on PATH
 
     from runlab_client import RunLab
 
-    rl = RunLab()                     # after `runlab login`, or with RUNLAB_URL / RUNLAB_TOKEN
+    rl = RunLab()                     # the key `runlab demo` / `login` saved, or RUNLAB_TOKEN
     rl.plan("demo", "treatment", "baseline", "acc", hypothesis="the change helps", n_max=10,
             stopping="fixed")
     rl.result("demo", "treatment", acc=0.91, seed=0)
@@ -36,6 +37,7 @@ from __future__ import annotations
 
 import json
 import os
+import random
 import re
 import shlex
 import socket
@@ -51,7 +53,7 @@ from pathlib import Path
 from typing import Any
 
 __all__ = ["RunLab", "RunLabError", "login", "result_line"]
-__version__ = "0.2.1"
+__version__ = "0.3.0"
 
 DEFAULT_URL = "https://runlab.tools"
 
@@ -615,6 +617,64 @@ def _cmd_logout(args: Any) -> int:
     return 0
 
 
+DEMO_SEEDS = 10
+QUICKSTART = ("https://github.com/omer-nachman/runlab-python/blob/main/examples/"
+              "quickstart.py")
+
+
+def _demo_train(arm: str, seed: int) -> float:
+    """The demo's simulated training run, as in examples/quickstart.py: accuracy 0.80 with
+    seed noise (sd 0.01), and the change ("treatment") adds +0.02."""
+    rng = random.Random(f"{arm}-{seed}")
+    return 0.80 + rng.gauss(0, 0.01) + (0.02 if arm == "treatment" else 0.0)
+
+
+def _cmd_demo(args: Any) -> int:
+    """Sign in if needed, then the whole loop on simulated numbers: plan, record 10 seeds per
+    arm, compare, check it is quotable; prints the verdict and where to go next."""
+    def say(line: str) -> None:
+        print(line, file=sys.stderr)
+
+    t0, project = time.monotonic(), args.project
+    try:
+        rl = RunLab(args.url)
+        if not rl.token:
+            say(f"Not logged in to {rl.url}: signing in first.")
+            say(f"Logged in as {login(args.url, browser=not args.no_browser)['user']}")
+            rl = RunLab(args.url)
+        say(f"1/4 plan: treatment vs baseline on acc, {DEMO_SEEDS} seeds, one test at the end")
+        rl.plan(project, "treatment", "baseline", "acc", n_max=DEMO_SEEDS, stopping="fixed",
+                hypothesis="the change raises accuracy")
+        say(f"2/4 record: {DEMO_SEEDS} seeds per arm (simulated: the change adds +0.02)")
+        rl.record(project, [result_line(arm, "acc", round(_demo_train(arm, seed), 6), seed=seed)
+                            for seed in range(DEMO_SEEDS) for arm in ("treatment", "baseline")])
+        say("3/4 compare: paired test over the shared seeds")
+        v = rl.compare(project, "treatment", "baseline", "acc")
+        say("4/4 report: may a write-up quote it?")
+        claims = rl.report(project, arm="treatment", metric="acc").get("claims") or []
+        listed = rl.verdicts(project, limit=1)
+        rows = listed.get("verdicts") if isinstance(listed, dict) else listed
+    except RunLabError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    except ValueError as exc:                    # a project name RunLab cannot store
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    except KeyboardInterrupt:
+        print("stopped", file=sys.stderr)
+        return 130
+    print()
+    print(v.get("text") or v.get("verdict"))
+    for c in claims:
+        print(f"{c.get('status')}: {c.get('quote')}")
+    vid = rows[0].get("id") if rows and isinstance(rows[0], dict) else None
+    if vid is not None:
+        print(f"\nThe verdict page: {rl.url}/v/{vid}")
+    print(f"\nDone in {time.monotonic() - t0:.0f} s, in your project `{project}`. The numbers "
+          "were simulated.\nNext, your own runs: replace train() in " + QUICKSTART)
+    return 0
+
+
 # ---------------------------------------------------------------- command line
 
 def main(argv: list[str] | None = None, prog: str | None = None) -> int:
@@ -640,6 +700,15 @@ def main(argv: list[str] | None = None, prog: str | None = None) -> int:
     who = sub.add_parser("whoami", help="who this machine is signed in as")
     who.add_argument("--url", help="your RunLab URL (default: the one you logged in to)")
     sub.add_parser("logout", help="revoke the saved key and delete it")
+    dm = sub.add_parser("demo", help="try RunLab in one command: sign in if needed, then a "
+                        "10-seed comparison on simulated numbers, ending in a verdict",
+                        description="Sign in if this machine is not yet, then plan, record 10 "
+                        "simulated seeds per arm, compare and report, in the project --project.")
+    dm.add_argument("--project", default="runlab-demo",
+                    help="the project to use (default: runlab-demo)")
+    dm.add_argument("--url", help="your RunLab URL (default: env RUNLAB_URL, else the one you "
+                    f"logged in to, else {DEFAULT_URL})")
+    dm.add_argument("--no-browser", action="store_true", help="only print the sign-in link")
     w = sub.add_parser("worker", help="run a study's seed pairs on this machine",
                        description="Run seed pairs of a planned comparison here and post the "
                        "numbers to RunLab until its sequential test decides, n_max seeds ran "
@@ -670,8 +739,8 @@ def main(argv: list[str] | None = None, prog: str | None = None) -> int:
     w.add_argument("--cwd", help="where the command runs (default: here)")
     args = ap.parse_args(argv)
     if args.command != "worker":
-        return {"login": _cmd_login, "whoami": _cmd_whoami, "logout": _cmd_logout}[
-            args.command](args)
+        return {"login": _cmd_login, "whoami": _cmd_whoami, "logout": _cmd_logout,
+                "demo": _cmd_demo}[args.command](args)
     try:
         rl = RunLab(args.url, args.token)
         sid = args.study

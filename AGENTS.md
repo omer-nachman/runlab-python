@@ -11,6 +11,8 @@ interval, checked against a plan registered before the seeds ran.
 - Access: the user runs `runlab login` once (it needs them to sign in with GitHub in a
   browser and approve, so ask them to run it; never approve for them). After that,
   `RunLab()` finds the saved key with no settings; `runlab whoami` shows who it signs in as.
+  `runlab demo` signs in the same way, then runs the loop on simulated numbers in project
+  `runlab-demo`: a check that everything works, not a result to report.
   In CI, `RUNLAB_TOKEN` (and `RUNLAB_URL`) are used instead.
   Never print, log or commit the token or `~/.config/runlab/token`.
 - `RunLab().me()` checks access. It returns `{"name": ..., "role": "agent"}`. A 401 means a
