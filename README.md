@@ -7,8 +7,13 @@ its baseline. RunLab gives back a verdict you can quote, built from:
 - a paired test across seeds, with a 95 % confidence interval;
 - checks that refuse a comparison that would mislead, e.g. arms tuned with unequal budgets.
 
-This repo has the Python client (standard library only), the
-[OpenAPI spec](openapi.json) ([rendered](api.html)) and examples.
+The RunLab Python client gives access to the RunLab API using only the standard library,
+on Python 3.10+.
+
+## Documentation
+
+- [API reference](https://omer-nachman.github.io/runlab-python/api.html)
+- [Examples](https://github.com/omer-nachman/runlab-python/tree/main/examples): Python and curl
 
 ## Get started
 
@@ -64,8 +69,10 @@ for c in rl.report("resnet-aug")["claims"]:
 ```
 
 `train` is your own training run. The numbers above are an illustration. A runnable version
-with a simulated `train` is [examples/quickstart.py](examples/quickstart.py), and
-[examples/curl.sh](examples/curl.sh) does the same loop over plain HTTP.
+with a simulated `train` is
+[examples/quickstart.py](https://github.com/omer-nachman/runlab-python/blob/main/examples/quickstart.py),
+and [examples/curl.sh](https://github.com/omer-nachman/runlab-python/blob/main/examples/curl.sh)
+does the same loop over plain HTTP.
 
 ## The loop
 
@@ -228,8 +235,9 @@ harmless anyway.
 ## Client reference
 
 `RunLab(url=None, token=None, *, timeout=30, retries=3, backoff_s=0.5)`. Every method returns
-the decoded JSON of one operation in [openapi.json](openapi.json). With no arguments it uses
-the key `runlab login` saved (see [Get started](#get-started)).
+the decoded JSON of one operation in
+[openapi.json](https://github.com/omer-nachman/runlab-python/blob/main/openapi.json).
+With no arguments it uses the key `runlab login` saved (see [Get started](#get-started)).
 
 | Method | Operation | Returns |
 |---|---|---|
@@ -259,9 +267,10 @@ the key `runlab login` saved (see [Get started](#get-started)).
 
 ## Coding agents
 
-[AGENTS.md](AGENTS.md) is the short version for Claude Code, Codex and other agents.
-[llms.txt](llms.txt) indexes this repo for LLM tools.
+[AGENTS.md](https://github.com/omer-nachman/runlab-python/blob/main/AGENTS.md)
+is the short version for Claude Code, Codex and other agents.
+[llms.txt](https://github.com/omer-nachman/runlab-python/blob/main/llms.txt) indexes this repo for LLM tools.
 
 ## License
 
-MIT ([LICENSE](LICENSE)).
+MIT ([LICENSE](https://github.com/omer-nachman/runlab-python/blob/main/LICENSE)).
