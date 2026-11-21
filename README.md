@@ -7,7 +7,7 @@
 **Did my change actually help?**
 
 RunLab compares a change (a new augmentation, loss or learning rate) with its baseline across
-random seeds and tells you whether it really improved your metric. For AI researchers and ML
+random seeds and tells you whether it really improved your metric. For AI researchers, ML
 engineers, and coding agents working with them.
 
 Your training stays where it runs today. You record each seed's metric for both arms from
