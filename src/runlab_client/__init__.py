@@ -52,7 +52,7 @@ from pathlib import Path
 from typing import Any
 
 __all__ = ["RunLab", "RunLabError", "login", "result_line"]
-__version__ = "0.3.1"
+__version__ = "0.3.2"
 
 DEFAULT_URL = "https://runlab.tools"
 

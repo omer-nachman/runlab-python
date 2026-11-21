@@ -4,13 +4,14 @@
 ![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](https://github.com/omer-nachman/runlab-python/blob/main/LICENSE)
 
-**Did my change actually help?** RunLab answers that for ML researchers and engineers, and for
-the coding agents working with them: a new augmentation, loss or learning rate against its
-baseline, across random seeds.
+**Did my change actually help?**
 
-Your training stays where it runs today. You record each seed's metric for both arms, your
-change and its baseline, from Python, the `runlab` command or plain HTTP. RunLab, hosted at
-[runlab.tools](https://runlab.tools), gives back a verdict you can quote, built from:
+RunLab compares a change (a new augmentation, loss or learning rate) with its baseline across
+random seeds and tells you whether it really improved your metric. For AI researchers and ML
+engineers, and coding agents working with them.
+
+Your training stays where it runs today. You record each seed's metric for both arms from
+Python or the `runlab` command, and RunLab gives back a verdict you can quote, built from:
 
 - a pre-registered plan;
 - a paired test across seeds, with a 95 % confidence interval;

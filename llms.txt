@@ -1,7 +1,7 @@
 # runlab-client
 
-> Python client and HTTP spec for the RunLab research API, for ML researchers, engineers and
-> their coding agents: did a change actually help? Pre-register an A-vs-B comparison, record
+> Python client and HTTP spec for the RunLab research API, for AI researchers, ML engineers
+> and their coding agents: did a change actually help? Pre-register an A-vs-B comparison, record
 > each seed's metric, and get a verdict. The verdict comes from a paired test with a 95 %
 > confidence interval, checked against the plan. It refuses a misleading comparison and says
 > which wins a write-up may quote. The client uses only the standard library. Get started:
