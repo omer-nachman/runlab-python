@@ -512,6 +512,20 @@ def _post_json(url: str, body: dict[str, Any], timeout: float) -> tuple[int, dic
     return status, out if isinstance(out, dict) else {}
 
 
+def _printable(text: Any) -> str:
+    """`text` with terminal control characters dropped: RunLab's words are printed to your
+    terminal, where an escape sequence could rewrite what it shows."""
+    return re.sub(r"[\x00-\x1f\x7f-\x9f]", "", str(text))
+
+
+def _own_page(link: str, base: str) -> bool:
+    """`link` is an http(s) page on RunLab's own host, and not plain http when `base` is
+    https: the only kind of link `login` opens in a browser."""
+    to, at = urllib.parse.urlsplit(link), urllib.parse.urlsplit(base)
+    return (to.scheme in ("http", "https") and bool(to.hostname)
+            and to.hostname == at.hostname and not (at.scheme == "https" and to.scheme == "http"))
+
+
 def _has_display() -> bool:
     """A browser here would open a window rather than take over this terminal (SSH, a
     headless GPU box)."""
@@ -535,11 +549,15 @@ def login(url: str | None = None, *, browser: bool = True, host: str | None = No
     status, start = _post_json(f"{base}/auth/device/start", {"host": name}, timeout)
     if status != 200 or not start.get("device_code"):
         raise RunLabError(status, str(start.get("error") or "cannot start a sign-in"))
-    link = str(start.get("verification_uri_complete") or start.get("verification_uri"))
+    link = _printable(start.get("verification_uri_complete") or start.get("verification_uri"))
     say(f"Sign in to RunLab: open {link}")
-    say(f"and check that the page shows the code {start.get('user_code')} (it works for "
-        f"{int(start.get('expires_in') or 600) // 60} minutes; open it on any device).")
-    if browser and _has_display():
+    say(f"and check that the page shows the code {_printable(start.get('user_code'))} (it "
+        f"works for {int(start.get('expires_in') or 600) // 60} minutes; open it on any device).")
+    own = _own_page(link, base)
+    if not own:
+        say(f"warning: that link is not RunLab's sign-in page on {parts.hostname}: "
+            "not opened; open it only if you trust it")
+    if browser and own and _has_display():
         try:
             webbrowser.open(link)
         except Exception as exc:  # noqa: BLE001 - the printed link still works
