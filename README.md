@@ -120,8 +120,11 @@ prints them (send its log to `record()`) or when you call the HTTP API directly.
 
 `a` is the treatment, `b` the baseline; `diff` is the mean of a − b, so it is positive when a
 scored higher. Lower is better for metric names containing `loss`, `error`, `err`,
-`perplexity`, `ppl`, `wer`, `cer`, `mse`, `mae`, `rmse`, `nll`, `latency`, `fid` or `regret`,
-higher otherwise; `better="higher"` or `better="lower"` overrides.
+`perplexity`, `ppl`, `wer`, `cer`, `mse`, `mae`, `rmse`, `nll`, `latency`, `fid` (also
+`fid50k`, `fid10k`), `kid`, `regret`, `bpb`, `bpc`, `bpd`, `bits_per_byte`, `bits_per_char`,
+`bits_per_dim`, `cross_entropy`, `xent`, `kl`, `ece`, `fpr`, `fnr` or `eer` as a whole word
+(between `_`, `.`, `/` or `-`), higher otherwise; `better="higher"` or `better="lower"`
+overrides. Pass `better` whenever your metric's name is not in this list.
 
 | `verdict` | Meaning |
 |---|---|

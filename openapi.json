@@ -354,7 +354,7 @@
                       "higher",
                       "lower"
                     ],
-                    "description": "`higher`, `lower` or `auto` (default: lower for names with loss, error, err, perplexity, ppl, wer, cer, mse, mae, rmse, nll, latency, fid, regret; else higher)."
+                    "description": "`higher`, `lower` or `auto` (default: lower for names with loss, error, err, perplexity, ppl, wer, cer, mse, mae, rmse, nll, latency, fid (and fid50k, fid10k), kid, regret, bpb, bpc, bpd, bits_per_byte, bits_per_char, bits_per_dim, cross_entropy, xent, kl, ece, fpr, fnr, eer as a whole word; else higher)."
                   },
                   "amend": {
                     "type": "string",
