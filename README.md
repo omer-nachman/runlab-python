@@ -2,12 +2,13 @@
 
 [![PyPI](https://img.shields.io/pypi/v/runlab-client)](https://pypi.org/project/runlab-client/)
 ![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)
+![Status: public preview](https://img.shields.io/badge/status-public%20preview-orange)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](https://github.com/omer-nachman/runlab-python/blob/main/LICENSE)
 
 **Did my change actually help?**
 
 RunLab compares a change (a new augmentation, loss or learning rate) with its baseline across
-random seeds and tells you whether it really improved your metric. For AI researchers, ML
+random seeds and tells you whether it really improved your metric. For AI researchers and ML
 engineers, and coding agents working with them.
 
 Your training stays where it runs today. You record each seed's metric for both arms from
@@ -16,6 +17,11 @@ Python or the `runlab` command, and RunLab gives back a verdict you can quote, b
 - a pre-registered plan;
 - a paired test across seeds, with a 95 % confidence interval;
 - checks that refuse a comparison that would mislead, e.g. arms tuned with unequal budgets.
+
+**Status: public preview (0.x).** Method names, response fields and the CLI may still change
+before 1.0; every change is in [CHANGELOG.md](https://github.com/omer-nachman/runlab-python/blob/main/CHANGELOG.md),
+breaking ones first. The statistics are not a preview: each test is checked by simulation, and
+where one is known to be weak it is listed under [Known limits](#known-limits), with numbers.
 
 ## Documentation
 
@@ -140,6 +146,19 @@ before `n_max` seeds, or planned after more than 3 seeds were seen); `missing` (
 | Many comparisons | At alpha 0.05, about 1 in 20 pairs with no real difference still comes out a "win". | `report()` applies Benjamini-Hochberg across all pairs in the project. Each claim is `quotable`, `quotable_with_caveat` or `not_quotable`, and carries a ready `quote`. |
 | Results can go bad | A seed or dataset later found broken undermines verdicts built on it. | `verdicts()` counts verdicts built on results since marked bad in `stale`; `verdicts(recheck=True)` judges each pair again on today's results (`unchanged`, `inputs_changed` or `flipped`). |
 
+### Known limits
+
+Every test is checked by simulation: 10,000 synthetic data sets per case, at 3, 5, 10 and 30
+seeds; a case counts as failing only when it fails again on a second, independent run. These
+cases fail, and RunLab does **not** warn about them in the verdict (a skewness warning was tried
+and dropped: it missed most of the false wins):
+
+| Data | What goes wrong | Measured (target) | What to do |
+|---|---|---|---|
+| Skewed per-seed differences: latency, cost, perplexity, a loss with rare blow-ups | `compare` calls a win too often; its 95 % CI is too narrow | false wins 0.12-0.18 (0.05); CI coverage 0.82-0.88 (0.95) | before any seed runs, `plan(..., scale="log")` (or `"rank"`): `compare` then tests on that scale |
+| The same, in a study (sequential test, one look per seed) | stops on a false win too often; the interval at the stop is too narrow | false wins 0.15 / 0.21 at 10 / 30 seeds (0.05); coverage 0.79-0.93 (0.95) | record the metric's log as its own metric and run the study on that |
+| The same, with `margin` (equivalence) | calls arms equivalent too often when the true gain equals the margin | 0.16-0.24 (0.05) | as in the first row |
+
 ## Studies: let RunLab run the seeds
 
 RunLab runs both arms one seed pair at a time and stops as soon as an always-valid sequential test
@@ -212,8 +231,11 @@ Every failure raises `RunLabError` with:
 | 404 | No such verdict or study. |
 | 413 | Body over 64 KiB; send results in several calls. |
 
-The client retries GET requests 3 times with exponential backoff, on connection errors and on
-429, 502, 503 and 504. It never retries POST requests.
+The client retries 3 times on connection errors and on 429, 502, 503 and 504, waiting what the
+`Retry-After` header asks (at most 60 s), else 0.5, 1 and 2 s. It retries reads and the writes
+RunLab stores only once (`plan`, `record` / `result`, `compare`, `work`), so a dropped
+connection at the end of a training job does not lose its results. Starting a study is never
+retried: a repeat would start a second one.
 
 ## Client reference
 
@@ -225,7 +247,7 @@ With no arguments it uses your sign-in; in CI, set `RUNLAB_TOKEN` instead.
 | Method | Operation | Returns |
 |---|---|---|
 | `me()` | `getMe` | `name`, `role` |
-| `plan(project, a, b, metric, hypothesis, n_max, **options)` | `registerPlan` | `plan`, `power_check`, `text`. Options: `better`, `alpha`, `n_min`, `stopping`, `amend`. |
+| `plan(project, a, b, metric, hypothesis, n_max, **options)` | `registerPlan` | `plan`, `power_check`, `text`. Options: `better`, `alpha`, `n_min`, `stopping`, `scale`, `amend`. |
 | `record(project, results)` | `recordResults` | `stored`, `already` |
 | `result(project, arm, *, seed=None, params=None, **metrics)` | `recordResults` | one line per metric, in one call |
 | `compare(project, a, b, metric, **options)` | `compareArms` | `verdict`, `diff`, `ci`, `p`, `test`, `n`, `prereg`, `warnings`, `text`. Options: `better`, `alpha`, `margin`. |
@@ -255,6 +277,21 @@ With no arguments it uses your sign-in; in CI, set `RUNLAB_TOKEN` instead.
 [AGENTS.md](https://github.com/omer-nachman/runlab-python/blob/main/AGENTS.md)
 is the short version for Claude Code, Codex and other agents.
 [llms.txt](https://github.com/omer-nachman/runlab-python/blob/main/llms.txt) indexes this repo for LLM tools.
+
+## Versioning and 1.0
+
+[Semantic versioning](https://semver.org/). In 0.x a minor version (0.3 → 0.4) may break
+something, and CHANGELOG.md says what and how to move; a patch (0.3.2 → 0.3.3) never does.
+Pin `runlab-client~=0.3.3` to take fixes only. 1.0 comes once all of these hold:
+
+| Criterion | Threshold |
+|---|---|
+| Breaking API or CLI changes | none for 8 weeks |
+| RunLab uptime | ≥ 99.5 % over 30 days |
+| Known limits | each one fixed, or flagged in the verdict's `warnings` |
+
+From 1.0 on, a breaking change needs a new major version and the old behaviour keeps working,
+with a deprecation warning, for at least 3 months.
 
 ## Support
 

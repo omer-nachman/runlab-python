@@ -28,13 +28,16 @@ shows who it signs in as and `runlab logout` revokes it.
 
 Standard library only, Python 3.10+. Each method is one operation of openapi.json.
 Errors raise RunLabError with the HTTP status, RunLab's message and the request id.
-GET requests are retried on connection errors and on 429, 502, 503 and 504 with exponential
-backoff; POST requests are never retried.
+Reads, and the writes RunLab stores only once (plan, record / result, compare, work), are
+retried on connection errors and on 429, 502, 503 and 504: after RunLab's Retry-After when
+it sends one (at most 60 s), else with exponential backoff. Starting a study is never retried.
 """
 
 from __future__ import annotations
 
+import email.utils
 import json
+import math
 import os
 import random
 import re
@@ -52,11 +55,30 @@ from pathlib import Path
 from typing import Any
 
 __all__ = ["RunLab", "RunLabError", "login", "result_line"]
-__version__ = "0.3.2"
+__version__ = "0.3.3"
 
 DEFAULT_URL = "https://runlab.tools"
 
 RETRY_STATUS = (429, 502, 503, 504)
+MAX_RETRY_AFTER_S = 60.0
+
+
+def _retry_after(value: str | None) -> float | None:
+    """Seconds a 429 / 503 asks to wait: `Retry-After` as seconds or an HTTP date (RFC 9110
+    10.2.3), capped at MAX_RETRY_AFTER_S; None when absent or unreadable."""
+    if not value:
+        return None
+    try:
+        s = float(value)
+    except ValueError:
+        try:
+            s = email.utils.parsedate_to_datetime(value).timestamp() - time.time()
+        except (TypeError, ValueError, IndexError, OverflowError):
+            return None
+    else:
+        if not math.isfinite(s) or s < 0:
+            return None
+    return min(max(s, 0.0), MAX_RETRY_AFTER_S)
 
 
 def _origin(url: str) -> tuple[str, str, int | None]:
@@ -117,8 +139,9 @@ class RunLab:
     # ------------------------------------------------------------------ HTTP
 
     def request(self, method: str, path: str, body: dict[str, Any] | None = None,
-                params: dict[str, Any] | None = None) -> Any:
-        """One call to `/api/v1{path}`; returns the decoded JSON body."""
+                params: dict[str, Any] | None = None, *, retry: bool | None = None) -> Any:
+        """One call to `/api/v1{path}`; returns the decoded JSON body. `retry`: whether a
+        repeat is safe (default: GET only), so a lost answer is asked for again."""
         q = {k: v for k, v in (params or {}).items() if v is not None}
         url = f"{self.url}/api/v1{path}" + (f"?{urllib.parse.urlencode(q)}" if q else "")
         rid = uuid.uuid4().hex[:16]
@@ -130,7 +153,9 @@ class RunLab:
         if method == "POST":
             headers["Content-Type"] = "application/json"
             data = json.dumps(body or {}).encode("utf-8")
-        attempts = 1 + (self.retries if method == "GET" else 0)
+        if retry is None:
+            retry = method == "GET"
+        attempts = 1 + (self.retries if retry else 0)
         for i in range(attempts):
             req = urllib.request.Request(url, data=data, headers=headers, method=method)
             try:
@@ -138,7 +163,8 @@ class RunLab:
                     return json.loads(r.read() or b"{}")
             except urllib.error.HTTPError as exc:
                 if exc.code in RETRY_STATUS and i + 1 < attempts:
-                    time.sleep(self.backoff_s * 2 ** i)
+                    wait = _retry_after(exc.headers.get("Retry-After"))
+                    time.sleep(self.backoff_s * 2 ** i if wait is None else wait)
                     continue
                 try:
                     msg = json.loads(exc.read() or b"{}").get("error") or exc.reason
@@ -166,17 +192,19 @@ class RunLab:
              **options: Any) -> dict[str, Any]:
         """Pre-register the comparison before any seed runs. Returns `plan`, `power_check`
         and `text`. options: better ("auto" | "higher" | "lower"), alpha, n_min,
-        stopping ("msprt" | "fixed"), amend (a reason, to replace an earlier plan)."""
+        stopping ("msprt" | "fixed"), scale ("raw" | "log" | "logit" | "rank": what `compare`
+        tests on; "log" or "rank" for skewed metrics), amend (a reason, to replace an earlier
+        plan)."""
         return self.request("POST", "/research/plans", {
             "project": project, "a": a, "b": b, "metric": metric,
-            "hypothesis": hypothesis, "n_max": n_max, **options})
+            "hypothesis": hypothesis, "n_max": n_max, **options}, retry=True)
 
     def record(self, project: str, results: str | list[str]) -> dict[str, Any]:
         """Store RESULT lines (one string, or a list of lines from `result_line`).
         Returns `stored` and `already` (lines RunLab had already)."""
         text = results if isinstance(results, str) else "\n".join(results)
         return self.request("POST", "/research/results",
-                            {"project": project, "results": text})
+                            {"project": project, "results": text}, retry=True)
 
     def result(self, project: str, experiment: str, *, seed: int | None = None,
                params: dict[str, Any] | None = None, **metrics: float) -> dict[str, Any]:
@@ -192,7 +220,7 @@ class RunLab:
         """Judge arm `a` against arm `b` on `metric`. Returns `verdict`, the test's numbers
         and `text`. options: better ("auto" | "higher" | "lower"), alpha, margin."""
         return self.request("POST", "/research/compare", {
-            "project": project, "a": a, "b": b, "metric": metric, **options})
+            "project": project, "a": a, "b": b, "metric": metric, **options}, retry=True)
 
     def verdicts(self, project: str = "", limit: int = 50,
                  recheck: bool = False) -> dict[str, Any]:
@@ -272,7 +300,7 @@ class RunLab:
                         results=results if isinstance(results, str)
                         else "\n".join(results or []), wall_s=wall_s)
         return self.request("POST", f"/research/studies/{urllib.parse.quote(study_id, safe='')}"
-                                    "/work", body)
+                                    "/work", body, retry=True)
 
     def run_worker(self, study_id: str, cmd: str, *, worker: str | None = None,
                    cwd: str | None = None, timeout: float | None = None,

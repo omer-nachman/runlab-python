@@ -62,6 +62,7 @@ jobs:
           python -m venv /tmp/v
           /tmp/v/bin/pip install -q --no-index --find-links dist/client --find-links dist/runlab runlab
           /tmp/v/bin/python -c "import runlab_client; print(runlab_client.__version__)"
+          /tmp/v/bin/python -c "import pathlib, runlab_client; assert (pathlib.Path(runlab_client.__file__).parent / 'py.typed').is_file(), 'wheel lacks py.typed'"
           /tmp/v/bin/runlab --version && /tmp/v/bin/runlab-client --version
           /tmp/v/bin/python -m runlab_client --version
           /tmp/v/bin/python -c "import importlib.util, sys; sys.exit(importlib.util.find_spec('runlab') is not None)"

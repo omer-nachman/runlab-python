@@ -4,13 +4,27 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "runlab-client"
-version = "0.3.2"
+version = "0.3.3"
 description = "Did my change actually help? Verdicts over seeds with confidence intervals, for AI researchers, ML engineers and their coding agents. Python client and CLI for RunLab; standard library only."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 authors = [{ name = "omer-nachman" }]
 dependencies = []
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
+]
 
 [project.scripts]
 runlab = "runlab_client:main"
@@ -19,6 +33,13 @@ runlab-client = "runlab_client:main"
 
 [project.urls]
 Homepage = "https://github.com/omer-nachman/runlab-python"
+Documentation = "https://omer-nachman.github.io/runlab-python/api.html"
+Changelog = "https://github.com/omer-nachman/runlab-python/blob/main/CHANGELOG.md"
+Issues = "https://github.com/omer-nachman/runlab-python/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+# PEP 561: type checkers read the client's hints only when the wheel carries this marker
+runlab_client = ["py.typed"]
