@@ -1,6 +1,6 @@
 """Did the change help? Plan, record 10 seeds per arm, get the verdict, check it is quotable.
 
-    pip install runlab-client
+    pip install -U runlab-client  # installs, or upgrades an older copy
     runlab login                  # or: export RUNLAB_URL=... RUNLAB_TOKEN=...
     python quickstart.py [project]
 

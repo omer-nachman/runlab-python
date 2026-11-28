@@ -5,10 +5,10 @@
 > each seed's metric, and get a verdict. The verdict comes from a paired test with a 95 %
 > confidence interval, checked against the plan. It refuses a misleading comparison and says
 > which wins a write-up may quote. The client uses only the standard library. Get started:
-> `pip install runlab-client`, then `runlab demo` (sign in with GitHub, then a first verdict
-> on simulated numbers) or `runlab login`; `RunLab()` then needs no settings (in CI: env
-> RUNLAB_TOKEN, RUNLAB_URL; in GitHub Actions, `runlab verdict` can run keyless with
-> `id-token: write`).
+> `pip install -U runlab-client` (installs, or upgrades an older copy), then `runlab demo`
+> (sign in with GitHub, then a first verdict on simulated numbers) or `runlab login`;
+> `RunLab()` then needs no settings (in CI: env RUNLAB_TOKEN, RUNLAB_URL; in GitHub Actions,
+> `runlab verdict` can run keyless with `id-token: write`).
 
 ## Docs
 

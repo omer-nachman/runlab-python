@@ -4,6 +4,17 @@ All notable changes to `runlab-client`. Breaking changes come first in each rele
 [Semantic versioning](https://semver.org/); in 0.x a minor version may break something, a
 patch never does (see "Versioning and 1.0" in the README).
 
+## Unreleased
+
+### Changed
+- `runlab demo` no longer prints a link to a verdict web page: RunLab's public service has no
+  website for now, only the API and sign-in. The verdict, its 95 % CI and the quotable claims
+  are printed in the terminal as before; `verdict(id)` and `verdicts(project)` return them as
+  data.
+- The install line is now `pip install -U runlab-client`: run again, it upgrades an older
+  copy to the latest release (plain `pip install` kept the old one: "Requirement already
+  satisfied").
+
 ## 0.4.0 (2026-11-27)
 
 Nothing breaks: everything is added.

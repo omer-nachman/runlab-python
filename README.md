@@ -31,7 +31,7 @@ where one is known to be weak it is listed under [Known limits](#known-limits), 
 ## Get started
 
 ```bash
-pip install runlab-client       # Python 3.10+, no dependencies
+pip install -U runlab-client    # installs, or upgrades an older copy; Python 3.10+
 runlab demo                     # sign in with GitHub, then a first verdict on simulated numbers
 ```
 
@@ -43,7 +43,6 @@ treatment vs baseline on acc (higher is better): treatment is better
   paired_t: diff +0.01868 [95% CI +0.01371, +0.02365], p=1.37e-05, n=10 (A 10, B 10)
   ...
 quotable: treatment − baseline on acc = +0.01868 (95 % CI [+0.01371, +0.02365]; ...)
-The verdict page: https://runlab.tools/v/...
 ```
 
 Next, your own runs: the [Quickstart](#quickstart) below, with your training run in place of

@@ -1,6 +1,6 @@
 """runlab-client: Python client for the RunLab research API.
 
-    $ pip install runlab-client
+    $ pip install -U runlab-client    # installs, or upgrades an older copy
     $ runlab demo                     # GitHub sign-in, then a first verdict on simulated numbers
     $ runlab login                    # sign in only; the key stays on this machine
 
@@ -747,8 +747,6 @@ def _cmd_demo(args: Any) -> int:
         v = rl.compare(project, "treatment", "baseline", "acc")
         say("4/4 report: may a write-up quote it?")
         claims = rl.report(project, arm="treatment", metric="acc").get("claims") or []
-        listed = rl.verdicts(project, limit=1)
-        rows = listed.get("verdicts") if isinstance(listed, dict) else listed
     except RunLabError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
@@ -762,9 +760,6 @@ def _cmd_demo(args: Any) -> int:
     print(v.get("text") or v.get("verdict"))
     for c in claims:
         print(f"{c.get('status')}: {c.get('quote')}")
-    vid = rows[0].get("id") if rows and isinstance(rows[0], dict) else None
-    if vid is not None:
-        print(f"\nThe verdict page: {rl.url}/v/{vid}")
     print(f"\nDone in {time.monotonic() - t0:.0f} s, in your project `{project}`. The numbers "
           "were simulated.\nNext, your own runs: replace train() in " + QUICKSTART)
     return 0
