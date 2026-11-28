@@ -26,6 +26,10 @@ sign in with GitHub there, on any device, and approve. The key is saved to
 ~/.config/runlab/token ($XDG_CONFIG_HOME respected), readable by you alone; `runlab whoami`
 shows who it signs in as and `runlab logout` revokes it.
 
+In a GitHub Actions job with no key and `permissions: id-token: write`, the client signs in
+with the job's GitHub OIDC token instead (keyless: no secret to store), as the RunLab user who
+owns the repository, for `runlab verdict`'s calls only.
+
 Standard library only, Python 3.10+. Each method is one operation of openapi.json.
 Errors raise RunLabError with the HTTP status, RunLab's message and the request id.
 Reads, and the writes RunLab stores only once (plan, record / result, compare, work), are
@@ -35,6 +39,7 @@ it sends one (at most 60 s), else with exponential backoff. Starting a study is 
 
 from __future__ import annotations
 
+import base64
 import email.utils
 import json
 import math
@@ -55,7 +60,7 @@ from pathlib import Path
 from typing import Any
 
 __all__ = ["RunLab", "RunLabError", "login", "result_line"]
-__version__ = "0.3.3"
+__version__ = "0.4.0"
 
 DEFAULT_URL = "https://runlab.tools"
 
@@ -104,6 +109,16 @@ class _KeepTokenOnOrigin(urllib.request.HTTPRedirectHandler):
 _OPENER = urllib.request.build_opener(_KeepTokenOnOrigin)
 
 
+def _jwt_exp(token: str) -> float | None:
+    """The `exp` claim of a JWT, unverified (only to know when to fetch a new one)."""
+    try:
+        part = token.split(".")[1]
+        exp = json.loads(base64.urlsafe_b64decode(part + "=" * (-len(part) % 4)))["exp"]
+        return float(exp)
+    except (IndexError, KeyError, TypeError, ValueError):
+        return None
+
+
 class RunLabError(RuntimeError):
     """An HTTP error (`status` 400-599) or RunLab unreachable (`status` 0)."""
 
@@ -121,7 +136,8 @@ class RunLab:
     url: your RunLab URL (default: env RUNLAB_URL, else the one `runlab login` signed in to,
         else https://runlab.tools).
     token: your API token (default: env RUNLAB_TOKEN, else the key `runlab login` saved, which
-        is only ever sent to the URL it was issued by).
+        is only ever sent to the URL it was issued by, else in a GitHub Actions job with
+        `permissions: id-token: write` the job's OIDC token for this URL).
     """
 
     def __init__(self, url: str | None = None, token: str | None = None, *,
@@ -132,11 +148,40 @@ class RunLab:
             token = os.environ.get("RUNLAB_TOKEN") or (
                 saved if saved and _same(self.url, saved_url) else "")
         self.token = token
+        self.agent = ""                    # appended to the User-Agent, e.g. "my-tool/1.0"
         self.timeout = timeout
         self.retries = retries
         self.backoff_s = backoff_s
+        self._oidc: tuple[str, float] = ("", 0.0)     # GitHub Actions token, refetch after
 
     # ------------------------------------------------------------------ HTTP
+
+    def _actions_token(self) -> str:
+        """With no key, in a GitHub Actions job granted `id-token: write`: the job's OIDC JWT
+        with this URL as its audience (so no other service accepts it), cached until a minute
+        before it expires. "" elsewhere."""
+        req_url = os.environ.get("ACTIONS_ID_TOKEN_REQUEST_URL", "")
+        req_token = os.environ.get("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "")
+        if not (req_url and req_token):
+            return ""
+        token, until = self._oidc
+        if token and time.time() < until:
+            return token
+        url = (req_url + ("&" if "?" in req_url else "?")
+               + urllib.parse.urlencode({"audience": self.url}))
+        req = urllib.request.Request(url, headers={"Authorization": f"bearer {req_token}",
+                                                   "Accept": "application/json"})
+        try:
+            with _OPENER.open(req, timeout=self.timeout) as r:  # noqa: S310 - the runner's URL
+                token = str(json.loads(r.read() or b"{}").get("value") or "")
+        except (urllib.error.URLError, OSError, ValueError, AttributeError) as exc:
+            raise RunLabError(0, f"GitHub Actions OIDC token: {getattr(exc, 'reason', exc)}"
+                              ) from None
+        if not token:
+            raise RunLabError(0, "GitHub Actions OIDC token: GitHub sent none")
+        exp = _jwt_exp(token)
+        self._oidc = (token, (exp if exp is not None else time.time() + 300) - 60)
+        return token
 
     def request(self, method: str, path: str, body: dict[str, Any] | None = None,
                 params: dict[str, Any] | None = None, *, retry: bool | None = None) -> Any:
@@ -146,9 +191,11 @@ class RunLab:
         url = f"{self.url}/api/v1{path}" + (f"?{urllib.parse.urlencode(q)}" if q else "")
         rid = uuid.uuid4().hex[:16]
         headers = {"Accept": "application/json", "X-Request-Id": rid,
-                   "User-Agent": f"runlab-client/{__version__}"}
-        if self.token:
-            headers["Authorization"] = f"Bearer {self.token}"
+                   "User-Agent": f"runlab-client/{__version__}"
+                   + (f" {self.agent}" if self.agent else "")}
+        token = self.token or self._actions_token()
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
         data = None
         if method == "POST":
             headers["Content-Type"] = "application/json"
@@ -170,6 +217,9 @@ class RunLab:
                     msg = json.loads(exc.read() or b"{}").get("error") or exc.reason
                 except ValueError:
                     msg = exc.reason
+                if exc.code == 401 and not token and os.environ.get("GITHUB_ACTIONS") == "true":
+                    msg = (f"{msg}; in GitHub Actions give the job `permissions: id-token: "
+                           "write` (keyless) or set RUNLAB_TOKEN")
                 raise RunLabError(exc.code, str(msg),
                                   exc.headers.get("X-Request-Id", rid)) from None
             except (urllib.error.URLError, OSError) as exc:
@@ -782,7 +832,12 @@ def main(argv: list[str] | None = None, prog: str | None = None) -> int:
     w.add_argument("--timeout", type=float, help="seconds per run; a longer run counts as "
                    "failed")
     w.add_argument("--cwd", help="where the command runs (default: here)")
+    from . import verdict
+
+    verdict.add_parser(sub)
     args = ap.parse_args(argv)
+    if args.command == "verdict":
+        return verdict.run(args)
     if args.command != "worker":
         return {"login": _cmd_login, "whoami": _cmd_whoami, "logout": _cmd_logout,
                 "demo": _cmd_demo}[args.command](args)

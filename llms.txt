@@ -7,11 +7,13 @@
 > which wins a write-up may quote. The client uses only the standard library. Get started:
 > `pip install runlab-client`, then `runlab demo` (sign in with GitHub, then a first verdict
 > on simulated numbers) or `runlab login`; `RunLab()` then needs no settings (in CI: env
-> RUNLAB_TOKEN, RUNLAB_URL).
+> RUNLAB_TOKEN, RUNLAB_URL; in GitHub Actions, `runlab verdict` can run keyless with
+> `id-token: write`).
 
 ## Docs
 
 - [README](https://github.com/omer-nachman/runlab-python/blob/main/README.md): get started (`runlab demo`), quickstart, the loop, verdict codes, studies (also `runlab worker`: seeds on your machine), errors, client reference
+- [README, Pull-request check](https://github.com/omer-nachman/runlab-python/blob/main/README.md#pull-request-check-runlab-verdict): `runlab verdict`, a check that records the seeds, compares and passes or fails a pull request; the spec `.runlab/verdict.yml` is read from the base commit
 - [AGENTS.md](https://github.com/omer-nachman/runlab-python/blob/main/AGENTS.md): how a coding agent should run the loop and report the result
 - [OpenAPI 3.1 spec](https://github.com/omer-nachman/runlab-python/blob/main/openapi.json): 11 operations under /api/v1, bearer-token auth
 
@@ -22,4 +24,4 @@
 
 ## Optional
 
-- [Client source](https://github.com/omer-nachman/runlab-python/blob/main/src/runlab_client/__init__.py): one file, about 800 lines
+- [Client source](https://github.com/omer-nachman/runlab-python/blob/main/src/runlab_client/__init__.py): about 1,500 lines in two files (`__init__.py`, `verdict.py`)

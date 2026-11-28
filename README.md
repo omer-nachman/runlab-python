@@ -218,6 +218,83 @@ runlab worker --project resnet-aug --a mixup --b baseline --metric acc \
 - Each run's time is recorded next to its metric, as `wall_s` and `usd` of its arm and seed.
 - From Python: `s = rl.start_worker_study(...)`, then `rl.run_worker(s["id"], cmd)`.
 
+## Pull-request check: `runlab verdict`
+
+`runlab verdict` turns a comparison into a check on each pull request: the difference, its
+95 % CI and the verdict, passing or failing on what you expected of the change. On GitHub the
+[runlab-action](https://github.com/omer-nachman/runlab-action) runs it in about 5 lines of
+workflow YAML.
+
+1. Commit the spec to your default branch as `.runlab/verdict.yml`:
+
+   ```yaml
+   paths: ["train/**", "configs/**"]   # other changes need no verdict
+   project: my-model
+   checks:
+     - a: "pr-{pr}-{sha7}"             # this pull request's seeds
+       b: "base-{pr}-{sha7}"           # the base branch's seeds, from the same job
+       metric: val_acc
+       expect: better
+   ```
+
+2. In the job, train both arms' seeds (each prints `RESULT:` lines with `seed=`), then:
+
+   ```bash
+   pip install "runlab-client[yaml]"
+   runlab verdict --post \
+     --results "out/pr/*.txt --arm pr-{pr}-{sha7}" \
+     --results "out/base/*.txt --arm base-{pr}-{sha7}"
+   ```
+
+Keyless: give the job `permissions: id-token: write` and set no `RUNLAB_TOKEN`. The client
+then signs in with the short-lived OIDC token GitHub gives the job, minted for your RunLab URL
+only, and RunLab accepts it as the RunLab user bound to the repository owner's GitHub account
+(the one `runlab login` signed in), for the calls `runlab verdict` makes only, at most at role
+`agent`. Nothing to store, leak or rotate. An organization's repository sets `RUNLAB_TOKEN`
+from a secret instead.
+
+It records the `RESULT:` lines of each file (other lines are skipped; `--arm` renames their
+experiment, `--project` picks the project when the spec has several), compares each row and
+writes the table to the job summary; `--post` also writes a check run named `runlab verdict`
+and one pull-request comment, updated on each push. `{pr}`, `{sha}`, `{sha7}` and `{branch}`
+are filled in: with `{sha7}` every push gets its own arms, so each pair is compared once (a
+second look at a pair warns `peeking`).
+
+| Spec key | Default | Meaning |
+|---|---|---|
+| `paths` | every path | globs: `*` within a folder, `**` across folders, `dir/` everything under it. A pull request that changes none gets a neutral check and records nothing. |
+| `project` | none | the project of every row that names none |
+| `a`, `b` | required | the change's arm and the baseline's |
+| `metric` | required | the metric to test |
+| `expect` | `better` | `better` passes on `a_better`; `not_worse` also on `equivalent` or `non_inferior` and needs `margin`; `different` on `a_better` or `b_better` |
+| `margin` | none | the smallest difference that matters, in the metric's units |
+| `better` | `auto` | `higher`, `lower`, or `auto` from the metric's name |
+| `alpha` | 0.05 | the test's level; the interval is 1 − alpha (95 %) |
+| `missing` | `failure` | the row's result when an arm has no results yet: `failure` or `neutral` |
+
+What keeps the check honest:
+
+- The spec is read from the pull request's **base** commit, so a pull request cannot loosen
+  the test it is judged by. One that adds or changes the spec is judged by the old one, or
+  gets a neutral check when there was none.
+- `refused` always fails, naming the check that refused and why; `insufficient` (fewer than
+  2 seeds in an arm) fails too, whatever the row expects.
+- An unknown key in the spec is an error, so a typo never turns a check off.
+
+Limits: the pull request's own job runs the seeds, so the check is only as trustworthy as
+that job. Pull requests from forks get no token or secrets in GitHub Actions, so they get no
+verdict.
+
+| Exit status | Meaning |
+|---|---|
+| 0 | every row met its `expect`, or no verdict was needed |
+| 4 | a row failed |
+| 2 | the spec, a results file, RunLab or GitHub stopped the check |
+
+Without `--post` it only prints the table and writes the job summary. `--spec-from head` reads
+the checked-out spec instead, to try one out. The spec may be JSON when PyYAML is not
+installed.
+
 ## Errors
 
 Every failure raises `RunLabError` with:
@@ -229,7 +306,7 @@ Every failure raises `RunLabError` with:
 | Status | Meaning |
 |---|---|
 | 400 | Bad input or a refused action. The message says what to fix; an unknown arm, metric or project names the closest match. |
-| 401 | Missing or wrong token. |
+| 401 | Missing or wrong token; for a keyless GitHub Actions job the message says why (e.g. the repository's owner has not signed in to RunLab). |
 | 403 | This key may not do this; the message says why. |
 | 404 | No such verdict or study. |
 | 413 | Body over 64 KiB; send results in several calls. |
@@ -245,7 +322,8 @@ retried: a repeat would start a second one.
 `RunLab(url=None, token=None, *, timeout=30, retries=3, backoff_s=0.5)`. Every method returns
 the decoded JSON of one operation in
 [openapi.json](https://github.com/omer-nachman/runlab-python/blob/main/openapi.json).
-With no arguments it uses your sign-in; in CI, set `RUNLAB_TOKEN` instead.
+With no arguments it uses your sign-in; in CI, set `RUNLAB_TOKEN` instead, or, in a GitHub
+Actions job with `id-token: write`, nothing (keyless, for `runlab verdict`).
 
 | Method | Operation | Returns |
 |---|---|---|
@@ -273,6 +351,7 @@ With no arguments it uses your sign-in; in CI, set `RUNLAB_TOKEN` instead.
 | `runlab whoami [--url URL]` | Who you are signed in as. |
 | `runlab logout` | Sign out. |
 | `runlab worker ...` | Run a study's seed pairs here (see above). |
+| `runlab verdict [--results "GLOB [--project P] [--arm A]"] [--spec PATH] [--spec-from base\|head] [--post]` | Record RESULT lines, compare the spec's arms, pass or fail as a pull-request check (see above). |
 | `runlab --version` | The client's version. |
 
 ## Coding agents
@@ -285,7 +364,7 @@ is the short version for Claude Code, Codex and other agents.
 
 [Semantic versioning](https://semver.org/). In 0.x a minor version (0.3 → 0.4) may break
 something, and CHANGELOG.md says what and how to move; a patch (0.3.2 → 0.3.3) never does.
-Pin `runlab-client~=0.3.3` to take fixes only. 1.0 comes once all of these hold:
+Pin `runlab-client~=0.4.0` to take fixes only. 1.0 comes once all of these hold:
 
 | Criterion | Threshold |
 |---|---|

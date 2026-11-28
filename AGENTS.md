@@ -13,7 +13,8 @@ interval, checked against a plan registered before the seeds ran.
   `RunLab()` finds the saved key with no settings; `runlab whoami` shows who it signs in as.
   `runlab demo` signs in the same way, then runs the loop on simulated numbers in project
   `runlab-demo`: a check that everything works, not a result to report.
-  In CI, `RUNLAB_TOKEN` (and `RUNLAB_URL`) are used instead.
+  In CI, `RUNLAB_TOKEN` (and `RUNLAB_URL`) are used instead; a GitHub Actions job with
+  `permissions: id-token: write` needs no token for `runlab verdict` (keyless).
   Never print, log or commit the token or `~/.config/runlab/token`.
 - `RunLab().me()` checks access. It returns `{"name": ..., "role": "agent"}`. A 401 means a
   bad or revoked key; ask the user to run `runlab login` again, don't retry.
@@ -53,8 +54,11 @@ interval, checked against a plan registered before the seeds ran.
 - `insufficient` means an arm has fewer than 2 seeds. Run more seeds.
 - On a 400, read the message. It names what is wrong and, for an unknown name, the closest
   match.
-- A POST is never retried by the client. Re-sending the same RESULT lines is safe: they are
-  counted in `already` and not stored twice.
+- The client retries `plan`, `record`, `compare` and `work` on connection errors and on 429,
+  502, 503 and 504; it never retries starting a study. Re-sending the same RESULT lines is
+  safe: they are counted in `already` and not stored twice.
+- To check a pull request, use `runlab verdict` (README, "Pull-request check"). Name the arms
+  with `{sha7}` so each push is its own pair and is compared once.
 
 ## Reference
 

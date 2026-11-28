@@ -4,6 +4,27 @@ All notable changes to `runlab-client`. Breaking changes come first in each rele
 [Semantic versioning](https://semver.org/); in 0.x a minor version may break something, a
 patch never does (see "Versioning and 1.0" in the README).
 
+## 0.4.0 (2026-11-27)
+
+Nothing breaks: everything is added.
+
+### Added
+- `runlab verdict`: a pull-request check that answers "did this change help?". It reads
+  `.runlab/verdict.yml` from the pull request's base commit, records the `RESULT:` lines of
+  each `--results` file, compares each row's arms and passes or fails on the row's `expect`
+  (`better`, `not_worse` with a margin, `different`). With `--post` it writes a check run and
+  one pull-request comment. Exit status 0, 4 (a row failed) or 2 (an error). See
+  "Pull-request check" in the README; the
+  [runlab-action](https://github.com/omer-nachman/runlab-action) runs it on GitHub.
+- The `yaml` extra (`pip install "runlab-client[yaml]"`) for a YAML spec; without it the
+  spec is JSON. The client itself still needs only the standard library.
+- `RunLab.agent`: text appended to the User-Agent, to name the tool making the calls.
+- Keyless GitHub Actions: with no key, in a job granted `permissions: id-token: write`, the
+  client sends the job's GitHub OIDC token (audience: your RunLab URL), cached until a minute
+  before it expires. RunLab accepts it as the user bound to the repository owner's GitHub
+  account, for `runlab verdict`'s calls only. A 401 in Actions with no credentials says what
+  to add.
+
 ## 0.3.3 (2026-11-24)
 
 ### Fixed
